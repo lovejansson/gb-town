@@ -15,6 +15,7 @@ import {
 
 import { AsepriteJSON, convertAsepriteToPixie } from "./spritesheet";
 import shorelineJSON from "./shoreline.json";
+import skaterJSON from "./skater-spritesheet.json";
 import tilemapJSON from "./tilemap.json";
 import "./style.css";
 import { Tilemap } from "./types";
@@ -25,6 +26,8 @@ const tilemap: Tilemap = tilemapJSON as unknown as Tilemap;
 const ShoreLinePixieJSON = convertAsepriteToPixie(
   shorelineJSON as AsepriteJSON,
 );
+
+const skaterPixieJSON = convertAsepriteToPixie(skaterJSON as AsepriteJSON);
 
 async function loadShader(src: string): Promise<string> {
   try {
@@ -81,6 +84,61 @@ async function loadShader(src: string): Promise<string> {
 
   app.stage.addChild(world);
 
+
+  const skaterTex: Texture = await Assets.load("assets/skater-spritesheet.png");
+
+  skaterTex.source.scaleMode = "nearest";
+
+  const skaterSpritesheet = new Spritesheet(skaterTex, skaterPixieJSON);
+ 
+
+  await skaterSpritesheet.parse();
+
+  console.dir(skaterSpritesheet);
+
+  const ollieAnimation = skaterSpritesheet.animations["ollie-f"].map(
+    (texture, _) => ({
+      texture,
+      time: skaterSpritesheet.data.frames[texture.label!].duration,
+      loop: true,
+    }),
+  );
+
+  const kickflip = skaterSpritesheet.animations["kickflip-f"].map(
+    (texture, _) => ({
+      texture,
+      time: skaterSpritesheet.data.frames[texture.label!].duration,
+      loop: true,
+    }),
+  );
+
+  const skater = new AnimatedSprite(ollieAnimation);
+
+ 
+  let anim = "ollie";
+
+  skater.onLoop = () => {
+    console.log("LOOOOOP")
+    if(anim === "kickflip") {
+      anim = "ollie";
+      skater.textures = ollieAnimation;
+    } else {
+      anim = "kickflip";
+      skater.textures = kickflip;
+    }
+
+    skater.play()
+  }
+
+  skater.onComplete = () => {
+    console.log("ON COMPLETE")
+  }
+
+
+
+ skater.play();
+
+
   const shorelineTex: Texture = await Assets.load("assets/shoreline.png");
 
   const tilemapTex = await createTextureFromBase64(tilemap.tilemap);
@@ -96,6 +154,7 @@ async function loadShader(src: string): Promise<string> {
     ShoreLinePixieJSON,
   );
 
+
   await shorelineSpritesheet.parse();
 
   const shorelineAnimation = shorelineSpritesheet.animations["shoreline"].map(
@@ -104,8 +163,6 @@ async function loadShader(src: string): Promise<string> {
       time: shorelineSpritesheet.data.frames[texture.label!].duration,
     }),
   );
-
-  
 
   const objectsWithTextures = await Promise.all(
     tilemap.objects.map(async (o) => ({
@@ -178,7 +235,6 @@ async function loadShader(src: string): Promise<string> {
     sl.position.x = i * shorelineSpritesheet.data.frames["shoreline-0"].frame.w;
     sl.play();
 
-    
     world.addChild(sl);
   }
 
@@ -186,12 +242,17 @@ async function loadShader(src: string): Promise<string> {
     world.addChild(o);
   }
 
+  
+  world.addChild(skater);
   let frame = 0;
 
   app.ticker.add((time) => {
     frame += time.deltaMS;
 
+
+
     if (frame >= 150) {
+  
       frame = 0;
       translate += pointVelocities[pvIdx];
 

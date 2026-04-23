@@ -14,7 +14,7 @@ export function convertAsepriteToPixie(spritesheet: AsepriteJSON): PixieJSON {
 
   for (const tag of spritesheet.meta.frameTags) {
     const animationFrames: string[] = [];
-    for (let i = tag.from; i < tag.to; ++i) {
+    for (let i = tag.from; i <= tag.to; ++i) {
       animationFrames.push(`${tag.name}-${i - tag.from}`);
     }
     animations[tag.name] = animationFrames;

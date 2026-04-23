@@ -6,10 +6,14 @@ Gör en mindre simulering som inkluderar huvud AI loopen men som bara visar leis
 eller det som finns i vyn, så whenever någon som bor utanför stan eller bara gör något annat som är utanför 
 stan så syns inte karaktären. 
 
+* Todo: decide design for animationsManager
+ finish integrating Pixie JS in lib so that it can be used normally and test setting the sprite in different animations to test it out
+
+ * Test a skate ramp sim here with pixie 
+
 * Gör action states för 1 karaktär 
 
 1. åka ramp
-
 2. äta ute 
 3. åka ferry wheel
 4. arcade
