@@ -1,0 +1,36 @@
+
+#Todo 
+
+
+Gör en mindre simulering som inkluderar huvud AI loopen men som bara visar leisure activites, 
+eller det som finns i vyn, så whenever någon som bor utanför stan eller bara gör något annat som är utanför 
+stan så syns inte karaktären. 
+
+* Gör action states för 1 karaktär 
+
+1. åka ramp
+
+2. äta ute 
+3. åka ferry wheel
+4. arcade
+5. dricka
+6. Sola
+7. Simma
+8. Bada
+9. Sitta i skogen
+10. Göra ett ärende i en butik 
+11. Cykla omkring 
+12. Gå omkring 
+
+* Gör en AI loop för karaktären 
+
+* Repetera ovan för alla andra karaktärer
+
+* Skapa relations and activities for that:
+- Gör allt ovan fast med någon annan 
+- Sparka/kasta boll
+
+
+
+
+
