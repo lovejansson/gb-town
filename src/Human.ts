@@ -1,27 +1,5 @@
 import { Scene, Sprite } from "./lib";
-import {
-  PositionUpdateType,
-  type AnimationOptions,
-  type AnimationConfigT,
-  type AnimationFrame,
-  type AnimationOverlay,
-} from "./lib/AnimationManager";
 import type { Direction, Vec2 } from "./lib/types";
-import spritesheetJSON from "./skater-spritesheet.json";
-import { type AsepriteJSON } from "./lib/index";
-
-const spritesheet = spritesheetJSON as unknown as AsepriteJSON;
-
-
-/**
- * 
- * En karaktär behöver ha en animated sprite i sig som sköter animeringarna, detta borde vara inbyggt i AnimationManager 
-som får skapa upp pixie animeringar istället
- * 
- * 
- * 
- * 
- */
 
 export default class Human extends Sprite {
   static CRUISE_SPEED = 4;
@@ -29,51 +7,93 @@ export default class Human extends Sprite {
   static TRICK_SPEED = 4;
   static WALK_SPEED = 1;
 
-
   tileSize: number;
 
-  constructor(
-    scene: Scene,
-    pos: Vec2,
-  ) {
+  constructor(scene: Scene, pos: Vec2) {
     super(scene, pos, 16, 32, "s");
 
     this.tileSize = scene.art!.tileSize;
 
-    const { animations, overlays } = createAnimationsFromAseprite(
-      spritesheet,
-      AnimationSettings,
-    );
+    this.animations.registerSpritesheet("skater", REPEAT_DEFAULTS);
 
-    for (const [name, anim] of Object.entries(animations)) {
-      this.animations.createAnim(name, anim as AnimationOptions);
-    }
+    this.animations.onFrameChange = (
+      name: string,
+      currentFrame: number,
+      _: number,
+    ) => {
+      const updateType = AnimationPositionUpdates[name];
 
-    console.dir(animations);
-    for (const [name, overlay] of Object.entries(overlays)) {
-      this.animations.createOverlay(name, overlay);
-    }
+      if (updateType === undefined) return; // overlay or unknown
 
+      if (updateType === PositionUpdateType.VEL) {
+        this.pos.x += this.vel.x;
+        this.pos.y += this.vel.y;
+        return;
+      } else if (updateType == PositionUpdateType.DELTA) {
+        const xDirMultiplier = name.includes("-w") ? -1 : 1;
+        // const yDirMultiplier = name.includes("-s") ? -1 : 1;
+
+        const motion = Motions[name];
+
+        if (motion) {
+          this.pos.x += motion[currentFrame].dx * xDirMultiplier;
+          this.pos.y += motion[currentFrame].dy;
+        }
+      }
+    };
   }
-
 
   update(dt: number): void {
-    this.animations.update(dt);
+    // this.animations.update(dt);
+  }
+
+  getEstimatedDistanceForAnim(name: string, vel?: Vec2): Vec2 {
+    const updateType = AnimationPositionUpdates[name];
+    const repeat = REPEAT_DEFAULTS[name]?.repeat ?? false;
+    const dist: Vec2 = { x: 0, y: 0 };
+
+    if (updateType === PositionUpdateType.DELTA) {
+      const xDirMultiplier = name.includes("-w") ? -1 : 1;
+      const motionKey = resolveMotionKey(name);
+      const frames = motionKey ? Motions[motionKey] : undefined;
+
+      if (!frames) return dist;
+
+      const sumFrames = () => {
+        for (const f of frames) {
+          dist.x += f.dx * xDirMultiplier;
+          dist.y += f.dy;
+        }
+      };
+
+      if (repeat === false) {
+        sumFrames();
+      } else if (typeof repeat === "number") {
+        for (let i = 0; i < repeat; i++) sumFrames();
+      } else {
+        // infinite loop — return direction * Infinity
+        sumFrames();
+        if (dist.x !== 0) dist.x = Infinity * Math.sign(dist.x);
+        if (dist.y !== 0) dist.y = Infinity * Math.sign(dist.y);
+      }
+    } else if (updateType === PositionUpdateType.VEL) {
+      const frameCount = this.animations.getFrameCount(name);
+
+      if (repeat === false) {
+        dist.x = (vel?.x ?? 0) * frameCount;
+        dist.y = (vel?.y ?? 0) * frameCount;
+      } else if (typeof repeat === "number") {
+        dist.x = (vel?.x ?? 0) * frameCount * repeat;
+        dist.y = (vel?.y ?? 0) * frameCount * repeat;
+      } else {
+        dist.x = (vel?.x ?? 0) !== 0 ? Infinity * Math.sign(vel!.x) : 0;
+        dist.y = (vel?.y ?? 0) !== 0 ? Infinity * Math.sign(vel!.y) : 0;
+      }
+    }
+
+    return dist;
   }
 }
-
-/**
- * Animation integration
- *
- * The exported Aseprite JSON file is used to create the animations. It contains a list of tag names which refers to an animation and contains references to which frames are used in that animation.
- *
- * - Each frame has data duration and spritesheet position x,y among other attributes.
- *
- * - The AnimationsSettings is a lookup record for the settings of each animation that are used by the AnimationManager. Each key maps to a tag name in the Aseprite JSON file.
- *
- * - Motions is another lookup record for motion series that is used by the animations with animation driver type Distance.
- *
- */
 
 export function getBoardFlipOverlay(direction: Direction) {
   switch (direction) {
@@ -157,364 +177,199 @@ export function getBoardCarryOverlay(
   }
 }
 
-const AnimationSettings: Record<
-  string,
-  | { driver: PositionUpdateType; repeat: number | boolean; isAnim: true }
-  | { isAnim: false }
-> = {
-  // Time-driven animations, repeating
-  "walk-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
+const VEL_ANIMS = [
+  "walk-n",
+  "walk-s",
+  "walk-e",
+  "walk-w",
+  "walk-board-n",
+  "walk-board-s",
+  "walk-board-e",
+  "walk-board-w",
+  "idle-sit-n",
+  "idle-sit-s",
+  "idle-stand-n",
+  "idle-stand-s",
+  "idle-stand-w",
+  "idle-stand-e",
+  "idle-stand-board-n",
+  "idle-stand-board-s",
+  "prep-n",
+  "prep-s",
+  "flip-n",
+  "flip-s",
+  "flip-w",
+  "flip-e",
+  "180-f",
+  "180-b",
+  "360-f",
+  "360-b",
+  "180-e-cw",
+  "180-e-ccw",
+  "180-w-cw",
+  "180-w-ccw",
+  "360-e-cw",
+  "360-e-ccw",
+  "360-w-cw",
+  "360-w-ccw",
+  "grab-f",
+  "grab-b",
+  "grab-w",
+  "grab-e",
+  "kickflip-f",
+  "kickflip-b",
+  "shove-it-f",
+  "shove-it-b",
+  "ollie-f",
+  "ollie-b",
+  "nose-grind-f-w",
+  "nose-grind-b-w",
+  "nose-grind-f-e",
+  "nose-grind-b-e",
+  "cruise-n",
+  "cruise-s",
+  "cruise-f-e",
+  "cruise-f-w",
+  "cruise-b-e",
+  "cruise-b-w",
+  "climb-up",
+  "climb-down",
+] as const;
 
-  "walk-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-board-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-board-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-board-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "walk-board-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-sit-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-sit-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-stand-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-stand-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-stand-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-stand-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
+const DELTA_ANIMS = [
+  "cruise-ramp-f-e",
+  "cruise-ramp-f-w",
+  "cruise-ramp-b-e",
+  "cruise-ramp-b-w",
+  "cruise-bowl-f-e",
+  "cruise-bowl-f-w",
+  "cruise-bowl-b-e",
+  "cruise-bowl-b-w",
+  "cruise-bowl-s-w",
+  "cruise-bowl-n-w",
+  "cruise-bowl-s-e",
+  "cruise-bowl-n-e",
+  "jump-up-f-w",
+  "jump-up-b-w",
+  "jump-up-f-e",
+  "jump-up-b-e",
+  "jump-down-f-w",
+  "jump-down-b-w",
+  "jump-down-f-e",
+  "jump-down-b-e",
+  "ramp-land-w",
+  "ramp-land-e",
+] as const;
 
-  "idle-stand-board-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "idle-stand-board-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
+type AnimationPositionUpdateMap = Record<string, PositionUpdateType>;
 
-  "prep-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
+enum PositionUpdateType {
+  VEL,
+  DELTA,
+}
 
-  "prep-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "flip-n": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "flip-s": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "flip-w": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "flip-e": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-
-  // Time-driven animations, no repeat
-  "180-f": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "180-b": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-f": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-b": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-
-  "180-e-cw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "180-e-ccw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "180-w-cw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "180-w-ccw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-e-cw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-e-ccw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-w-cw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "360-w-ccw": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-
-  "grab-f": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "grab-b": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "grab-w": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "grab-e": { driver: PositionUpdateType.Vel, repeat: false, isAnim: true },
-  "kickflip-f": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "kickflip-b": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "shove-it-f": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "shove-it-b": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "ollie-f": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "ollie-b": {
-    driver: PositionUpdateType.Vel,
-    repeat: false,
-    isAnim: true,
-  },
-  "nose-grind-f-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "nose-grind-b-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "nose-grind-f-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "nose-grind-b-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-
-  "cruise-n": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "cruise-s": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-
-  "cruise-f-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "cruise-f-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "cruise-b-e": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "cruise-b-w": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-
-  "cruise-ramp-f-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-ramp-f-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-ramp-b-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-ramp-b-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "cruise-bowl-f-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-bowl-f-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-bowl-b-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-bowl-b-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "cruise-bowl-s-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-bowl-n-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "cruise-bowl-s-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "cruise-bowl-n-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-up-f-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-up-b-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-up-f-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-up-b-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-down-f-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-down-b-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-down-f-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "jump-down-b-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  "ramp-land-w": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-  "ramp-land-e": {
-    driver: PositionUpdateType.Delta,
-    repeat: false,
-    isAnim: true,
-  },
-
-  // Time + movement sync
-  "climb-up": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-  "climb-down": {
-    driver: PositionUpdateType.Vel,
-    repeat: true,
-    isAnim: true,
-  },
-
-  // Overlays, overlays follow their parent animation's settings
-
-  "board-carry-r": { isAnim: false },
-  "board-carry-l": { isAnim: false },
-  "board-carry-c": { isAnim: false },
-
-  "board-carry-idle-r": { isAnim: false },
-  "board-carry-idle-l": { isAnim: false },
-  "board-carry-idle-c": { isAnim: false },
-
-  "flip-board-n": { isAnim: false },
-  "flip-board-e": { isAnim: false },
-  "flip-board-s": { isAnim: false },
-  "flip-board-w": { isAnim: false },
+const AnimationPositionUpdates: AnimationPositionUpdateMap = {
+  ...Object.fromEntries(
+    VEL_ANIMS.map((name) => [name, PositionUpdateType.VEL]),
+  ),
+  ...Object.fromEntries(
+    DELTA_ANIMS.map((name) => [name, PositionUpdateType.DELTA]),
+  ),
 };
+
+const REPEAT_DEFAULTS: Record<string, { repeat: number | boolean }> = {
+  // Looping
+  "walk-n": { repeat: true },
+  "walk-s": { repeat: true },
+  "walk-e": { repeat: true },
+  "walk-w": { repeat: true },
+  "walk-board-n": { repeat: true },
+  "walk-board-s": { repeat: true },
+  "walk-board-e": { repeat: true },
+  "walk-board-w": { repeat: true },
+  "idle-sit-n": { repeat: true },
+  "idle-sit-s": { repeat: true },
+  "idle-stand-n": { repeat: true },
+  "idle-stand-s": { repeat: true },
+  "idle-stand-w": { repeat: true },
+  "idle-stand-e": { repeat: true },
+  "idle-stand-board-n": { repeat: true },
+  "idle-stand-board-s": { repeat: true },
+  "nose-grind-f-w": { repeat: true },
+  "nose-grind-b-w": { repeat: true },
+  "nose-grind-f-e": { repeat: true },
+  "nose-grind-b-e": { repeat: true },
+  "cruise-n": { repeat: true },
+  "cruise-s": { repeat: true },
+  "cruise-f-e": { repeat: true },
+  "cruise-f-w": { repeat: true },
+  "cruise-b-e": { repeat: true },
+  "cruise-b-w": { repeat: true },
+  "climb-up": { repeat: true },
+  "climb-down": { repeat: true },
+  // Play once
+  "prep-n": { repeat: false },
+  "prep-s": { repeat: false },
+  "flip-n": { repeat: false },
+  "flip-s": { repeat: false },
+  "flip-w": { repeat: false },
+  "flip-e": { repeat: false },
+  "180-f": { repeat: false },
+  "180-b": { repeat: false },
+  "360-f": { repeat: false },
+  "360-b": { repeat: false },
+  "180-e-cw": { repeat: false },
+  "180-e-ccw": { repeat: false },
+  "180-w-cw": { repeat: false },
+  "180-w-ccw": { repeat: false },
+  "360-e-cw": { repeat: false },
+  "360-e-ccw": { repeat: false },
+  "360-w-cw": { repeat: false },
+  "360-w-ccw": { repeat: false },
+  "grab-f": { repeat: false },
+  "grab-b": { repeat: false },
+  "grab-w": { repeat: false },
+  "grab-e": { repeat: false },
+  "kickflip-f": { repeat: false },
+  "kickflip-b": { repeat: false },
+  "shove-it-f": { repeat: false },
+  "shove-it-b": { repeat: false },
+  "ollie-f": { repeat: false },
+  "ollie-b": { repeat: false },
+  "cruise-ramp-f-e": { repeat: false },
+  "cruise-ramp-f-w": { repeat: false },
+  "cruise-ramp-b-e": { repeat: false },
+  "cruise-ramp-b-w": { repeat: false },
+  "cruise-bowl-f-e": { repeat: false },
+  "cruise-bowl-f-w": { repeat: false },
+  "cruise-bowl-b-e": { repeat: false },
+  "cruise-bowl-b-w": { repeat: false },
+  "cruise-bowl-s-w": { repeat: false },
+  "cruise-bowl-n-w": { repeat: false },
+  "cruise-bowl-s-e": { repeat: false },
+  "cruise-bowl-n-e": { repeat: false },
+  "jump-up-f-w": { repeat: false },
+  "jump-up-b-w": { repeat: false },
+  "jump-up-f-e": { repeat: false },
+  "jump-up-b-e": { repeat: false },
+  "jump-down-f-w": { repeat: false },
+  "jump-down-b-w": { repeat: false },
+  "jump-down-f-e": { repeat: false },
+  "jump-down-b-e": { repeat: false },
+  "ramp-land-w": { repeat: false },
+  "ramp-land-e": { repeat: false },
+};
+
+function resolveMotionKey(name: string): string | null {
+  if (name.startsWith("cruise-ramp")) return "cruise-ramp";
+  if (name.startsWith("cruise-bowl-s")) return "cruise-bowl-s";
+  if (name.startsWith("cruise-bowl-n")) return "cruise-bowl-n";
+  if (name.startsWith("cruise-bowl")) return "cruise-bowl-h";
+  if (name.startsWith("jump-up")) return `jump-up-${name.includes("-e") ? "e" : "w"}`;
+  if (name.startsWith("jump-down")) return `jump-down-${name.includes("-e") ? "e" : "w"}`;
+  if (name.startsWith("ramp-land")) return null; // no delta data
+  return name; // kickflip-f, shove-it-b, etc. match directly
+}
 
 const Motions: Record<string, { dx: number; dy: number }[]> = {
   "cruise-ramp": [
@@ -580,150 +435,150 @@ const Motions: Record<string, { dx: number; dy: number }[]> = {
   "shove-it-b": Array(4).fill({ dx: 2, dy: 0 }),
 };
 
-function createAnimationsFromAseprite(
-  asepriteData: AsepriteJSON,
-  animationSettings: Record<
-    string,
-    | { driver: PositionUpdateType; repeat: number | boolean; isAnim: true }
-    | { isAnim: false }
-  >,
-): {
-  animations: Record<string, AnimationConfigT<PositionUpdateType>>;
-  overlays: Record<string, AnimationOverlay>;
-} {
-  const animations: Record<string, AnimationConfigT<PositionUpdateType>> = {};
-  const overlays: Record<string, AnimationOverlay> = {};
+// function createAnimationsFromAseprite(
+//   asepriteData: AsepriteJSON,
+//   animationSettings: Record<
+//     string,
+//     | { driver: PositionUpdateType; repeat: number | boolean; isAnim: true }
+//     | { isAnim: false }
+//   >,
+// ): {
+//   animations: Record<string, AnimationConfigT<PositionUpdateType>>;
+//   overlays: Record<string, AnimationOverlay>;
+// } {
+//   const animations: Record<string, AnimationConfigT<PositionUpdateType>> = {};
+//   const overlays: Record<string, AnimationOverlay> = {};
 
-  for (const tag of asepriteData.meta.frameTags) {
-    const settings = animationSettings[tag.name] || {
-      driver: PositionUpdateType.Vel,
-      repeat: true,
-    };
+//   for (const tag of asepriteData.meta.frameTags) {
+//     const settings = animationSettings[tag.name] || {
+//       driver: PositionUpdateType.Vel,
+//       repeat: true,
+//     };
 
-    if (settings.isAnim) {
-      const frames: AnimationFrame[] = [];
+//     if (settings.isAnim) {
+//       const frames: AnimationFrame[] = [];
 
-      const direction = tag.name.match(/\-{1}([n, e, s, w, c])\-?/)?.at(1);
-      const xDirMultiplier = tag.name.includes("-w") ? -1 : 1;
+//       const direction = tag.name.match(/\-{1}([n, e, s, w, c])\-?/)?.at(1);
+//       const xDirMultiplier = tag.name.includes("-w") ? -1 : 1;
 
-      for (let i = tag.from; i <= tag.to; i++) {
-        const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
+//       for (let i = tag.from; i <= tag.to; i++) {
+//         const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
 
-        if (!frame)
-          throw new Error("Missing frame data for tag frame " + tag.name);
+//         if (!frame)
+//           throw new Error("Missing frame data for tag frame " + tag.name);
 
-        const frameData = frame.frame;
-        const duration = frame.duration;
+//         const frameData = frame.frame;
+//         const duration = frame.duration;
 
-        // Add motion for animations that have predefined deltas for each animation frame
+//         // Add motion for animations that have predefined deltas for each animation frame
 
-        if (settings.driver === PositionUpdateType.Delta) {
-          const isCruiseRamp = tag.name.startsWith("cruise-ramp");
-          const isCruiseBowl = tag.name.startsWith("cruise-bowl");
-          const isLandRamp = tag.name.startsWith("ramp-land");
-          const isJump = tag.name.startsWith("jump");
+//         if (settings.driver === PositionUpdateType.DELTA) {
+//           const isCruiseRamp = tag.name.startsWith("cruise-ramp");
+//           const isCruiseBowl = tag.name.startsWith("cruise-bowl");
+//           const isLandRamp = tag.name.startsWith("ramp-land");
+//           const isJump = tag.name.startsWith("jump");
 
-          if (isCruiseRamp) {
-            const delta = Motions["cruise-ramp"][i - tag.from];
-            frames.push({
-              spritesheetX: frameData.x,
-              spritesheetY: frameData.y,
-              duration,
-              dx: delta.dx * xDirMultiplier,
-              dy: delta.dy,
-            });
-          } else if (isCruiseBowl) {
-            if (direction === "s" || direction === "n") {
-              const motion = Motions["cruise-bowl-" + direction];
+//           if (isCruiseRamp) {
+//             const delta = Motions["cruise-ramp"][i - tag.from];
+//             frames.push({
+//               spritesheetX: frameData.x,
+//               spritesheetY: frameData.y,
+//               duration,
+//               dx: delta.dx * xDirMultiplier,
+//               dy: delta.dy,
+//             });
+//           } else if (isCruiseBowl) {
+//             if (direction === "s" || direction === "n") {
+//               const motion = Motions["cruise-bowl-" + direction];
 
-              for (const d of motion) {
-                frames.push({
-                  spritesheetX: frameData.x,
-                  spritesheetY: frameData.y,
-                  duration,
-                  dx: d.dx,
-                  dy: d.dy,
-                });
-              }
-            } else {
-              const delta = Motions[`cruise-bowl-h`][i - tag.from];
-              frames.push({
-                spritesheetX: frameData.x,
-                spritesheetY: frameData.y,
-                duration,
-                dx: delta.dx * xDirMultiplier,
-                dy: delta.dy,
-              });
-            }
-          } else if (isLandRamp) {
-            for (const { dx, dy } of [{ dy: 0, dx: 0 * xDirMultiplier }]) {
-              frames.push({
-                spritesheetX: frameData.x,
-                spritesheetY: frameData.y,
-                duration: 500,
-                dx,
-                dy,
-              });
-            }
-          } else if (isJump) {
-            if (direction === undefined)
-              throw new Error("No direction found in jump anim");
-            const upDown = tag.name.includes("up") ? "up" : "down";
-            const motion = Motions[`jump-${upDown}-${direction}`];
+//               for (const d of motion) {
+//                 frames.push({
+//                   spritesheetX: frameData.x,
+//                   spritesheetY: frameData.y,
+//                   duration,
+//                   dx: d.dx,
+//                   dy: d.dy,
+//                 });
+//               }
+//             } else {
+//               const delta = Motions[`cruise-bowl-h`][i - tag.from];
+//               frames.push({
+//                 spritesheetX: frameData.x,
+//                 spritesheetY: frameData.y,
+//                 duration,
+//                 dx: delta.dx * xDirMultiplier,
+//                 dy: delta.dy,
+//               });
+//             }
+//           } else if (isLandRamp) {
+//             for (const { dx, dy } of [{ dy: 0, dx: 0 * xDirMultiplier }]) {
+//               frames.push({
+//                 spritesheetX: frameData.x,
+//                 spritesheetY: frameData.y,
+//                 duration: 500,
+//                 dx,
+//                 dy,
+//               });
+//             }
+//           } else if (isJump) {
+//             if (direction === undefined)
+//               throw new Error("No direction found in jump anim");
+//             const upDown = tag.name.includes("up") ? "up" : "down";
+//             const motion = Motions[`jump-${upDown}-${direction}`];
 
-            for (const d of motion) {
-              frames.push({
-                spritesheetX: frameData.x,
-                spritesheetY: frameData.y,
-                duration,
-                dx: d.dx,
-                dy: d.dy,
-              });
-            }
-          } else {
-            const delta = Motions[tag.name][i - tag.from];
+//             for (const d of motion) {
+//               frames.push({
+//                 spritesheetX: frameData.x,
+//                 spritesheetY: frameData.y,
+//                 duration,
+//                 dx: d.dx,
+//                 dy: d.dy,
+//               });
+//             }
+//           } else {
+//             const delta = Motions[tag.name][i - tag.from];
 
-            frames.push({
-              spritesheetX: frameData.x,
-              spritesheetY: frameData.y,
-              duration,
-              ...delta,
-            });
-          }
-        } else {
-          frames.push({
-            spritesheetX: frameData.x,
-            spritesheetY: frameData.y,
-            duration,
-          });
-        }
-      }
+//             frames.push({
+//               spritesheetX: frameData.x,
+//               spritesheetY: frameData.y,
+//               duration,
+//               ...delta,
+//             });
+//           }
+//         } else {
+//           frames.push({
+//             spritesheetX: frameData.x,
+//             spritesheetY: frameData.y,
+//             duration,
+//           });
+//         }
+//       }
 
-      animations[tag.name] = {
-        positionUpdateType: settings.driver,
-        repeat: settings.repeat,
-        spritesheet: "skater",
-        frames,
-      };
-    } else {
-      const frames: { spritesheetX: number; spritesheetY: number }[] = [];
+//       animations[tag.name] = {
+//         positionUpdateType: settings.driver,
+//         repeat: settings.repeat,
+//         spritesheet: "skater",
+//         frames,
+//       };
+//     } else {
+//       const frames: { spritesheetX: number; spritesheetY: number }[] = [];
 
-      for (let i = tag.from; i <= tag.to; i++) {
-        const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
-        if (!frame) throw new Error("Missing frame data for tag frame");
-        const frameData = frame.frame;
-        frames.push({
-          spritesheetX: frameData.x,
-          spritesheetY: frameData.y,
-        });
-      }
+//       for (let i = tag.from; i <= tag.to; i++) {
+//         const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
+//         if (!frame) throw new Error("Missing frame data for tag frame");
+//         const frameData = frame.frame;
+//         frames.push({
+//           spritesheetX: frameData.x,
+//           spritesheetY: frameData.y,
+//         });
+//       }
 
-      overlays[tag.name] = {
-        spritesheet: "skater",
-        frames,
-      };
-    }
-  }
+//       overlays[tag.name] = {
+//         spritesheet: "skater",
+//         frames,
+//       };
+//     }
+//   }
 
-  return { animations, overlays };
-}
+//   return { animations, overlays };
+// }

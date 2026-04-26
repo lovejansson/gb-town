@@ -1,5 +1,5 @@
 import ArtObject from "./ArtObject.js";
-import Scene from "../Scene.js";
+import type Scene from "../Scene.js";
 import type { Vec2 } from "../types.ts";
 
 export default class StaticImage extends ArtObject {
@@ -24,16 +24,5 @@ export default class StaticImage extends ArtObject {
     this.halfWidth = width / 2;
     this.halfHeight = height / 2;
     this.image = image;
-  }
-
-  draw(ctx: CanvasRenderingContext2D): void {
-    if (this.scene.art === null)
-      throw new Error("art is not set on scene object");
-
-    const img = this.scene.art.images.get(this.image);
-
-    if (!img) return; // safety check
-
-    ctx.drawImage(img, this.pos.x, this.pos.y);
   }
 }

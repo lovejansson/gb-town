@@ -1,41 +1,20 @@
-import { FrameObject, AnimatedSprite } from "pixi.js";
-import type Sprite from "./objects/Sprite.js";
-import type { Vec2 } from "./types.js";
+import type { AnimatedSprite } from "pixi.js";
+import type Sprite from "./objects/Sprite.ts";
+import AnimationCanvasAdapter from "./AnimationCanvasAdapter.ts";
+import type AnimationPixiAdapter from "./AnimationPixiAdapter.ts";
 
-export enum PositionUpdateType {
-  Delta, // Animation updates to next frame after duration ms. Sprite's position is also updated according to dx and dy.
-  Vel, // Animation updates to next frame after duration ms. Sprite's position is also updated according to sprite's velocity.
+type AnimationPixiAdapterClass = new (sprite: Sprite) => AnimationPixiAdapter;
+let _AnimationPixiAdapterClass: AnimationPixiAdapterClass | null = null;
+
+export async function preloadPixiAnimationAdapter(): Promise<void> {
+  const mod = await import("./AnimationPixiAdapter.ts");
+  _AnimationPixiAdapterClass = mod.default;
 }
 
-export type AnimationOptionsT<T extends PositionUpdateType> = {
-  positionUpdateType: T;
-  deltas: T extends PositionUpdateType.Delta
-    ? { dx: number; dy: number }[]
-    : undefined; // Deltas to update the Sprite's position with when frame changes
-  repeat: number | boolean; // true loop infinitly, repeat a number of times or just one time
+export type AnimationOptions = {
+  repeat?: number | boolean; // true = loop forever, number = fixed repeat count, false = play once
+  overlay?: OverlayOptions;
 };
-
-export type AnimationOptions =
-  | AnimationOptionsT<PositionUpdateType.Delta>
-  | AnimationOptionsT<PositionUpdateType.Vel>;
-
-type AnimationConfigT<T extends PositionUpdateType> = AnimationOptionsT<T> & {
-  frames: AnimationFrameT<T>[];
-};
-
-type AnimationFrameT<T extends PositionUpdateType> =
-  T extends PositionUpdateType.Delta
-    ? {
-        delta: { dx: number; dy: number };
-        texture: FrameObject;
-      }
-    : {
-        texture: FrameObject;
-      };
-
-type AnimationFrame =
-  | AnimationFrameT<PositionUpdateType.Delta>
-  | AnimationFrameT<PositionUpdateType.Vel>;
 
 export type OverlayOptions = {
   name: string;
@@ -45,259 +24,126 @@ export type OverlayOptions = {
   drawOnTop?: boolean;
 };
 
-type PlayingAnimationT<T extends PositionUpdateType> = {
-  positionUpdateType: T;
-  name: string;
-  config: AnimationConfigT<T>;
+export type FrameChangeCallback = (
+  animation: string,
+  frame: number,
+  totalFrames: number,
+) => void;
+export type LoopCallback = (animation: string, loopCount: number) => void;
+export type CompleteCallback = (animation: string) => void;
 
-  loopCount: number;
-  overlay?: OverlayOptions;
+export type AnimationDefaults = Record<
+  string,
+  { repeat: number | boolean }
+>;
+
+export type RegisterSpritesheetOptions = {
+  defaults?: AnimationDefaults;
+  onFrameChange?: FrameChangeCallback | null;
+  onLoop?: LoopCallback | null;
+  onComplete?: CompleteCallback | null;
 };
 
-// TODO: create extra sprite for overlay to draw on top of the sprite when animating
+export type RegisterSpritesheetInput =
+  | AnimationDefaults
+  | RegisterSpritesheetOptions;
 
-type PlayingAnimation =
-  | PlayingAnimationT<PositionUpdateType.Delta>
-  | PlayingAnimationT<PositionUpdateType.Vel>;
-
-type AnimationConfig =
-  | AnimationConfigT<PositionUpdateType.Delta>
-  | AnimationConfigT<PositionUpdateType.Vel>;
+type Adapter = AnimationCanvasAdapter | AnimationPixiAdapter;
 
 export default class AnimationManager {
-  sprite: Sprite;
-  animatedSprite: AnimatedSprite | null;
-  animatedSpriteOverlay: AnimatedSprite | null;
-  animations: Map<string, AnimationConfig>;
-  overlays: Map<string, FrameObject[]>;
-  playingAnimation: PlayingAnimation | null;
+  private adapter: Adapter;
 
   constructor(sprite: Sprite) {
-    this.sprite = sprite;
-    this.animatedSprite = null;
-    this.animatedSpriteOverlay = null;
-    this.animations = new Map();
-    this.overlays = new Map();
-    this.playingAnimation = null;
-  }
-
-  createAnim(
-    spritesheet: string,
-    animation: string,
-    options: AnimationOptions,
-  ) {
-    const s = this.sprite.scene.art!.spritesheets.get(spritesheet);
-
-    switch (options.positionUpdateType) {
-      case PositionUpdateType.Delta:
-        const frames: AnimationFrameT<PositionUpdateType.Delta>[] =
-          s.animations[animation].map((texture, idx) => ({
-            texture: {
-              texture,
-              time: s.data.frames[texture.label!].duration,
-            },
-            delta: options.deltas[idx],
-          }));
-
-        this.animations.set(animation, { ...options, frames });
-        break;
-      case PositionUpdateType.Vel:
-        {
-          const frames: AnimationFrameT<PositionUpdateType.Vel>[] =
-            s.animations[animation].map((texture, _) => ({
-              texture: {
-                texture,
-                time: s.data.frames[texture.label!].duration,
-              },
-            }));
-
-          this.animations.set(animation, { ...options, frames });
-        }
-        break;
-    }
-  }
-
-  createOverlay(spritesheet: string, animation: string) {
-    const s = this.sprite.scene.art!.spritesheets.get(spritesheet);
-
-    const frames: FrameObject[] = s.animations[animation].map((texture, _) => ({
-      texture,
-      time: s.data.frames[texture.label!].duration,
-    }));
-
-    this.overlays.set(animation, frames);
-  }
-
-  getEstimatedDistanceForAnim(name: string, vel?: Vec2): Vec2 {
-    const anim = this.animations.get(name);
-
-    if (!anim) throw new AnimationNotAddedError(name);
-
-    const dist = { x: 0, y: 0 };
-
-    switch (anim.positionUpdateType) {
-      case PositionUpdateType.Delta:
-        if (anim.repeat === false) {
-          for (const f of anim.frames) {
-            dist.x += f.delta.dx;
-            dist.y += f.delta.dy;
-          }
-        } else if (typeof anim.repeat === "number") {
-          for (let i = 0; i < anim.repeat; ++i) {
-            for (const f of anim.frames) {
-              dist.x += f.delta.dx;
-              dist.y += f.delta.dy;
-            }
-          }
-        } else {
-          dist.x = Infinity;
-          dist.y = Infinity;
-
-          for (const f of anim.frames) {
-            dist.x += f.delta.dx;
-            dist.y += f.delta.dy;
-          }
-
-          if (dist.x !== 0) {
-            dist.x = Infinity * Math.sign(dist.x);
-          }
-
-          if (dist.y !== 0) {
-            dist.y = Infinity * Math.sign(dist.y);
-          }
-        }
-
-        break;
-      case PositionUpdateType.Vel:
-        for (let i = 0; i < anim.frames.length; ++i) {
-          dist.x += vel?.x ?? 0;
-          dist.y += vel?.y ?? 0;
-        }
-        break;
-    }
-
-    return dist;
-  }
-
-  play(name: string, overlay?: OverlayOptions) {
-    const anim = this.animations.get(name);
-
-    if (!anim) throw new AnimationNotAddedError(name);
-
-    const animationOverlay =
-      overlay !== undefined ? this.overlays.get(overlay.name) : undefined;
-
-    switch (anim.positionUpdateType) {
-      case PositionUpdateType.Delta:
-        this.playingAnimation = {
-          positionUpdateType: anim.positionUpdateType,
-          name,
-          config: anim,
-          overlay:
-            animationOverlay && overlay
-              ? { ...animationOverlay, ...overlay }
-              : undefined,
-          loopCount: 0,
-        };
-        break;
-      case PositionUpdateType.Vel:
-        this.playingAnimation = {
-          positionUpdateType: anim.positionUpdateType,
-          name,
-          config: anim,
-          overlay:
-            animationOverlay && overlay
-              ? { ...animationOverlay, ...overlay }
-              : undefined,
-          loopCount: 0,
-        };
-        break;
-    }
-
-    if (this.playingAnimation.overlay) {
-      if (this.animatedSpriteOverlay === null) {
-        this.animatedSpriteOverlay = new AnimatedSprite(
-          this.playingAnimation.overlay.frames,
-          this.playingAnimation.config.repeat === true ? true : false,
-        );
-      } else {
-        this.animatedSpriteOverlay.textures =
-          this.playingAnimation.overlay.frames;
-      }
-
-      this.animatedSpriteOverlay.play();
-    }
-
-    if (this.animatedSprite === null) {
-      this.animatedSprite = new AnimatedSprite(
-        this.playingAnimation.config.frames.map((f) => f.texture),
-        this.playingAnimation.config.repeat === true ? true : false,
-      );
+    // Compare against string literal to avoid importing Art (which would create a circular dep)
+    if (sprite.scene.getRenderMode() === "canvas" || _AnimationPixiAdapterClass === null) {
+      this.adapter = new AnimationCanvasAdapter(sprite);
     } else {
-      this.animatedSprite.textures = this.playingAnimation.config.frames.map(
-        (f) => f.texture,
-      );
-    }
-
-    this.animatedSprite.play();
-
-    this.animatedSprite.onLoop = () => {
-      this.playingAnimation!.loopCount++;
-    };
-
-    this.animatedSprite.onComplete = () => {
-      if (typeof this.playingAnimation!.config.repeat === "number") {
-        this.playingAnimation!.loopCount++;
-        this.animatedSprite!.play();
-        this.animatedSpriteOverlay?.play();
-      }
-    };
-
-    // TODO: sync OVERLAY Animated sprite with main animated sprite
-
-    this.animatedSprite.onFrameChange = (currFrame: number) => {
-      switch (this.playingAnimation!.positionUpdateType) {
-        case PositionUpdateType.Delta:
-          const delta = this.playingAnimation?.config.frames[currFrame].delta!;
-          this.animatedSprite.position.set(this.animatedSprite.) += delta.dx;
-          this.animatedSprite.pos.y += delta.dy;
-          break;
-        case PositionUpdateType.Vel:
-          this.animatedSprite.pos.x += this.animatedSprite.vel.x;
-          this.animatedSprite.pos.y += this.animatedSprite.vel.y;
-          break;
-      }
-    };
-  }
-
-  stop(name: string) {
-    if (this.playingAnimation && name === this.playingAnimation.name) {
-      this.playingAnimation = null;
+      this.adapter = new _AnimationPixiAdapterClass(sprite);
     }
   }
 
-  loopCount(): number {
-    return this.playingAnimation?.loopCount ?? 0;
+  attachPixiSprites(main: AnimatedSprite, overlay: AnimatedSprite): void {
+    if ("attachPixiSprites" in this.adapter) {
+      (this.adapter as AnimationPixiAdapter).attachPixiSprites(main, overlay);
+    }
   }
 
-  isPlaying(name: string): boolean {
-    return this.playingAnimation?.name === name;
+  registerSpritesheet(
+    key: string,
+    options?: RegisterSpritesheetInput,
+  ): void {
+    this.adapter.registerSpritesheet(key, options);
   }
 
-  isLastFrame(): boolean {
-    return (
-      this.animatedSprite !== null &&
-      this.animatedSprite.currentFrame === this.animatedSprite.totalFrames
-    );
+  play(name: string, options?: AnimationOptions): void {
+    this.adapter.play(name, options);
+  }
+
+  stop(name: string): void {
+    this.adapter.stop(name);
   }
 
   getPlaying(): string | null {
-    return this.playingAnimation?.name ?? null;
+    return this.adapter.currentAnimation;
   }
-}
 
-class AnimationNotAddedError extends Error {
-  constructor(key: string) {
-    super(`Animation: ${key} not added.`);
+  isPlaying(name: string): boolean {
+    return this.adapter.currentAnimation === name;
+  }
+
+  getEstimatedDistanceForAnim(
+    name: string,
+    vel: { x: number; y: number },
+  ): { x: number; y: number } {
+    const frameCount = this.adapter.getFrameCount(name);
+    return { x: frameCount * vel.x, y: frameCount * vel.y };
+  }
+
+  isLastFrame(): boolean {
+    return this.adapter.isLastFrame();
+  }
+
+  getFrameCount(name: string): number {
+    return this.adapter.getFrameCount(name);
+  }
+
+  update(dt: number): void {
+    this.adapter.update(dt);
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    this.adapter.draw(ctx);
+  }
+
+  get currentAnimation(): string | null {
+    return this.adapter.currentAnimation;
+  }
+
+  get loopCount(): number {
+    return this.adapter.loopCount;
+  }
+
+  get onFrameChange(): FrameChangeCallback | null {
+    return this.adapter.onFrameChange;
+  }
+
+  set onFrameChange(cb: FrameChangeCallback | null) {
+    this.adapter.onFrameChange = cb;
+  }
+
+  get onLoop(): LoopCallback | null {
+    return this.adapter.onLoop;
+  }
+
+  set onLoop(cb: LoopCallback | null) {
+    this.adapter.onLoop = cb;
+  }
+
+  get onComplete(): CompleteCallback | null {
+    return this.adapter.onComplete;
+  }
+
+  set onComplete(cb: CompleteCallback | null) {
+    this.adapter.onComplete = cb;
   }
 }

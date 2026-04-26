@@ -1,4 +1,4 @@
-import { Assets, Texture } from "pixi.js";
+import type { Texture } from "pixi.js";
 
 export default class TexturesManager {
   private textures: Map<string, Texture>;
@@ -23,6 +23,7 @@ export default class TexturesManager {
    * Loads textures that have been added.
    */
   async load(): Promise<void> {
+    const { Assets } = await import("pixi.js");
     const texturePromises: Promise<[string, Texture]>[] = [];
 
     for (const [name, path] of this.paths.entries()) {
@@ -32,7 +33,7 @@ export default class TexturesManager {
             const tex = await Assets.load(path);
             tex.source.scaleMode = "nearest";
 
-            resolve(tex);
+            resolve([name, tex]);
           } catch (e) {
             reject(new LoadTextureError(name, path, (e as Error).message));
           }

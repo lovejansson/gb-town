@@ -1,23 +1,43 @@
 import AudioPlayer from "./AudioPlayer.ts";
 import Scene from "./Scene.ts";
 import TexturesManager from "./TexturesManager.ts";
-import SpritesheetsManager from "./SpritesheetsManager.ts";
+import SpritesheetsManager, {
+ type PixiJSON,
+ type SpritesheetCanvas,
+} from "./SpritesheetsManager.ts";
+import ImagesManager from "./ImagesManager.ts";
+import type { Spritesheet as PixiSpritesheet } from "pixi.js";
+import { preloadPixiClasses } from "./Scene.ts";
+import { preloadPixiAnimationAdapter } from "./AnimationManager.ts";
+import SpritesheetCanvasAdapter from "./SpritesheetCanvasAdapter.ts";
+import Renderer, { CanvasRenderer } from "./Renderer.ts";
 
-export type ArtConfig = {
+export enum RenderMode {
+  CANVAS = "canvas",
+  PIXI = "pixi",
+}
+
+export type ArtConfig<T extends RenderMode> = {
   width: number;
   height: number;
-  tileSize?: number;
+  tileSize: number;
   play: Scene;
   pause: Scene;
-  canvas?: string;
+  container?: string;
   displayGrid: boolean;
+  gridColor?: string;
   services?: Record<string, any>;
+  mode: T;
+  scale?: "hd" | "4k" | null;
 };
 
-const CANVAS_SELECTOR_DEFAULT = "#art-canvas";
-const DEFAULT_TILE_SIZE = 16;
+type Spritesheet<T extends RenderMode> = T extends RenderMode.CANVAS
+  ? SpritesheetCanvas
+  : PixiSpritesheet<PixiJSON>;
 
-export default class Art {
+const CONTAINER_SELECTOR_DEFAULT = "#art-container";
+
+export default class Art<T extends RenderMode> {
   keys: {
     up: boolean;
     right: boolean;
@@ -26,36 +46,54 @@ export default class Art {
     space: boolean;
   };
 
-  isPlaying: boolean;
-  // images: ImagesManager;
   textures: TexturesManager;
-  spritesheets: SpritesheetsManager;
+  spritesheets!: SpritesheetsManager<Spritesheet<T>>;
+  images: ImagesManager;
   audio: AudioPlayer;
-  config: ArtConfig;
-  ctx!: CanvasRenderingContext2D;
   services: Record<string, any> | null;
 
   width: number;
   height: number;
   tileSize: number;
   displayGrid: boolean;
-  startTime: Date | null;
-  elapsedPrev: number;
+  gridColor: string;
+  scale: "hd" | "4k" | null;
 
-  #currId: number;
+  isPlaying: boolean;
 
-  constructor(config: ArtConfig) {
-    // this.images = new ImagesManager();
+  private config: ArtConfig<T>;
+  private startTime: Date | null;
+  private currId: number;
+  private renderer!: Renderer;
+
+constructor(config: ArtConfig<T>) {
+    this.images = new ImagesManager();
     this.textures = new TexturesManager();
-    this.spritesheets = new SpritesheetsManager(this.textures);
+
+    if (config.mode === RenderMode.CANVAS) {
+      this.renderer = new Renderer(
+        new CanvasRenderer(
+          this as Art<RenderMode.CANVAS>,
+          config as ArtConfig<RenderMode.CANVAS>,
+        ),
+      );
+      this.spritesheets = new SpritesheetsManager(
+        new SpritesheetCanvasAdapter(),
+      ) as SpritesheetsManager<Spritesheet<T>>;
+    }
+    // Pixi mode: renderer and spritesheets are set in init()
+
     this.audio = new AudioPlayer();
+
     this.isPlaying = false;
+
     this.config = config;
-    this.elapsedPrev = 0;
     this.width = config.width;
     this.height = config.height;
-    this.tileSize = config.tileSize ?? DEFAULT_TILE_SIZE;
+    this.tileSize = config.tileSize;
     this.displayGrid = config.displayGrid ?? false;
+    this.gridColor = config.gridColor ?? "white";
+    this.scale = config.scale ?? null;
     this.services = config.services ?? null;
 
     this.keys = {
@@ -67,7 +105,7 @@ export default class Art {
     };
 
     this.startTime = null;
-    this.#currId = -1;
+    this.currId = -1;
   }
 
   enterFullScreen(): void {
@@ -82,84 +120,45 @@ export default class Art {
   }
 
   getId(): number {
-    this.#currId++;
-    return this.#currId;
+    this.currId++;
+    return this.currId;
   }
 
-  async start(): Promise<void> {
-    await this.#init();
-    this.#privatePlay(this.ctx);
-  }
-
-  async play(): Promise<void> {
-    this.audio.onOffSwitch();
-    this.config.play.start();
-    this.config.pause.stop();
-    this.isPlaying = true;
-  }
-
-  async pause(): Promise<void> {
-    this.audio.onOffSwitch();
-    this.config.pause.start();
-    this.config.play.stop();
-    this.isPlaying = false;
-  }
-
-  async #privatePlay(
-    ctx: CanvasRenderingContext2D,
-    elapsed = 0,
-  ): Promise<void> {
-    try {
-      const dt = elapsed - this.elapsedPrev;
-
-      const currentTransform = ctx.getTransform();
-      ctx.clearRect(
-        0 - currentTransform.e,
-        0 - currentTransform.f,
-        this.width,
-        this.height,
+  async init(): Promise<void> {
+    // Lazily load pixi deps here since constructor can't be async
+    
+    if (this.config.mode === RenderMode.PIXI) {
+      const [rendererMod, spritesheetMod] = await Promise.all([
+        import("./PixiRenderer.ts"),
+        import("./SpritesheetPixiAdapter.ts"),
+        preloadPixiClasses(),
+        preloadPixiAnimationAdapter(),
+      ]);
+      this.renderer = new Renderer(
+        new rendererMod.PixiRenderer(
+          this as Art<RenderMode.PIXI>,
+          this.config as ArtConfig<RenderMode.PIXI>,
+        ),
       );
-
-      if (this.isPlaying) {
-        this.config.play.update(dt);
-        this.config.play.draw(ctx);
-
-        if (this.displayGrid) {
-          this.#drawGrid(
-            ctx,
-            this.height / this.tileSize,
-            this.width / this.tileSize,
-            this.tileSize,
-            "white",
-          );
-        }
-      } else {
-        this.config.pause.update(dt);
-        this.config.pause.draw(ctx);
-      }
-
-      this.elapsedPrev = elapsed;
-    } catch (e) {
-      if (this.startTime) {
-        const { hours, minutes, seconds } = diffHMS(new Date(), this.startTime);
-        console.log(`Time since start ${hours}:${minutes}:${seconds}`);
-      }
-      console.error(e);
-      await this.pause();
+      this.spritesheets = new SpritesheetsManager(
+        new spritesheetMod.default(this.textures),
+      ) as SpritesheetsManager<Spritesheet<T>>;
     }
 
-    requestAnimationFrame((t) => this.#privatePlay(ctx, t));
-  }
-
-  async #init(): Promise<void> {
     this.startTime = new Date();
-    const ctx = this.#initCanvas(this.config.canvas ?? CANVAS_SELECTOR_DEFAULT);
 
     this.config.play.art = this;
     this.config.pause.art = this;
 
+    this.config.play.setRenderMode(this.config.mode);
+    this.config.pause.setRenderMode(this.config.mode);
+
     await this.config.play.init();
     await this.config.pause.init();
+
+    await this.renderer.init(
+      this.config.container ?? CONTAINER_SELECTOR_DEFAULT,
+    );
 
     window.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
@@ -178,45 +177,31 @@ export default class Art {
       if (["arrowleft", "a"].includes(key)) this.keys.left = false;
       if (key === " ") this.keys.space = false;
     });
-
-    this.ctx = ctx;
-  }
-
-  #initCanvas(selector: string): CanvasRenderingContext2D {
-    const canvas = document.querySelector<HTMLCanvasElement>(selector);
-    if (!canvas) throw new Error("canvas is null");
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("ctx is null");
-
-    canvas.width = this.width;
-    canvas.height = this.height;
-    ctx.imageSmoothingEnabled = true;
-
-    return ctx;
-  }
-
-  #drawGrid(
-    ctx: CanvasRenderingContext2D,
-    rows: number,
-    cols: number,
-    cellSize: number,
-    strokeColor = "black",
-  ) {
-    ctx.beginPath();
-    ctx.strokeStyle = strokeColor;
-    const offset = 0.5;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        ctx.moveTo(c * cellSize + offset, r * cellSize + offset);
-        ctx.lineTo((c + 1) * cellSize + offset, r * cellSize + offset);
-        ctx.lineTo((c + 1) * cellSize + offset, (r + 1) * cellSize + offset);
-        ctx.lineTo(c * cellSize + offset, (r + 1) * cellSize + offset);
-        ctx.lineTo(c * cellSize + offset, r * cellSize + offset);
+    try {
+      this.renderer.run();
+    } catch (e) {
+      if (this.startTime) {
+        const { hours, minutes, seconds } = diffHMS(new Date(), this.startTime);
+        console.log(`Time since start ${hours}:${minutes}:${seconds}`);
       }
+      console.error(e);
     }
-    ctx.stroke();
+  }
+
+  async play(): Promise<void> {
+    this.audio.onOffSwitch();
+    this.config.play.start();
+    this.config.pause.stop();
+    this.isPlaying = true;
+    this.renderer.play();
+  }
+
+  async pause(): Promise<void> {
+    this.audio.onOffSwitch();
+    this.config.pause.start();
+    this.config.play.stop();
+    this.isPlaying = false;
+    this.renderer.pause();
   }
 }
 

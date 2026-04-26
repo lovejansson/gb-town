@@ -1,3 +1,4 @@
+import { type AnimationOptions } from "./AnimationManager";
 import type Sprite from "./objects/Sprite";
 
 export enum TransitionType {
@@ -16,13 +17,7 @@ type TransitionCondition<T extends TransitionType> =
 export type SequenceAnimationT<T extends TransitionType> = {
   type: T;
   anim: string;
-  overlay?: {
-    name: string;
-    dx?: number;
-    dy?: number;
-    drawBehind?: boolean;
-    drawOnTop?: boolean;
-  };
+  options?: AnimationOptions,
   transition: TransitionCondition<T>;
 };
 
@@ -68,20 +63,14 @@ export default class AnimationSequence {
 
   static createAnim<T extends TransitionType>(config: {
     anim: string;
-    overlay?: {
-      name: string;
-      dx?: number;
-      dy?: number;
-      drawBehind?: boolean;
-      drawOnTop?: boolean;
-    };
+    options?: AnimationOptions;
     type: T;
     transition: TransitionCondition<T>;
   }): SequenceAnimationT<T> {
     return {
       type: config.type,
       anim: config.anim,
-      overlay: config.overlay,
+      options: config.options,
       transition: config.transition,
     };
   }
@@ -144,7 +133,7 @@ export default class AnimationSequence {
         }
         break;
       case TransitionType.Finished:
-        if (!this.sprite.animations.isPlaying(playingAnim.anim.anim)) {
+        if (this.sprite.animations.currentAnimation !== playingAnim.anim.anim) {
           this.currIdx++;
           if (this.currIdx === this.sequence.length) {
             this.isFinished = true;
@@ -177,7 +166,7 @@ export default class AnimationSequence {
         break;
     }
 
-    this.sprite.animations.play(anim.anim, anim.overlay);
+    this.sprite.animations.play(anim.anim, anim.options);
     if (this.onAdvanceCb) this.onAdvanceCb(anim.anim);
   }
 }

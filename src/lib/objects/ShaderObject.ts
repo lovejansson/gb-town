@@ -1,8 +1,16 @@
 import ArtObject from "./ArtObject.js";
-import Scene from "../Scene.js";
+import type Scene from "../Scene.js";
 import type { Vec2 } from "../types.ts";
+import { type ContainerChild } from "pixi.js";
 
-export default class StaticObject extends ArtObject {
+/**
+ * 
+ * Use ShaderObject class to create custom shader Graphics using Pixi's built in Graphics class. 
+ * 
+ * Implement 'getPixiChild' to make sure the correct geometry is added to the rendering. 
+ * 
+ */
+export default abstract class ShaderObject extends ArtObject {
   pos: Vec2;
   width: number;
   height: number;
@@ -22,8 +30,6 @@ export default class StaticObject extends ArtObject {
     this.halfWidth = width / 2;
     this.halfHeight = height / 2;
   }
-  
-  draw(_: CanvasRenderingContext2D): void {
-    // Don't have to draw anything since this is probably part of the tilemap already
-  }
+
+  abstract getPixiContainer(): ContainerChild;
 }

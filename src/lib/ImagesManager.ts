@@ -1,10 +1,10 @@
 export default class ImagesManager {
-    #images: Map<string, HTMLImageElement>;
-    #paths: Map<string, string>;
+    private images: Map<string, HTMLImageElement>;
+    private paths: Map<string, string>;
 
     constructor() {
-        this.#images = new Map();
-        this.#paths = new Map();
+        this.images = new Map();
+        this.paths = new Map();
     }
 
     /**
@@ -13,7 +13,7 @@ export default class ImagesManager {
      * @param path The URL or path to the image file.
      */
     add(name: string, path: string): void {
-        this.#paths.set(name, path);
+        this.paths.set(name, path);
     }
 
     /**
@@ -22,7 +22,7 @@ export default class ImagesManager {
     async load(): Promise<void> {
         const loadPromises: Promise<[string, HTMLImageElement]>[] = [];
 
-        for (const [name, path] of this.#paths.entries()) {
+        for (const [name, path] of this.paths.entries()) {
             const image = new Image();
 
             const loadPromise = new Promise<[string, HTMLImageElement]>((resolve, reject) => {
@@ -36,10 +36,10 @@ export default class ImagesManager {
 
         const loadedImages = await Promise.all(loadPromises);
         for (const [name, image] of loadedImages) {
-            this.#images.set(name, image);
+            this.images.set(name, image);
         }
 
-        this.#paths.clear();
+        this.paths.clear();
     }
 
     /**
@@ -49,13 +49,12 @@ export default class ImagesManager {
      * @throws ImageNotLoadedError if the image has not been loaded yet.
      */
     get(name: string): HTMLImageElement {
-        const image = this.#images.get(name);
+        const image = this.images.get(name);
         if (!image) throw new ImageNotLoadedError(name);
         return image;
     }
 }
 
-/* ------------------ Error classes ------------------ */
 
 export class ImageNotLoadedError extends Error {
     constructor(imageName: string) {
