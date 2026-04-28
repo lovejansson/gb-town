@@ -1,13 +1,7 @@
 
 # Todo 
 
-Gör en mindre simulering som inkluderar huvud AI loopen men som bara visar leisure activites, 
-eller det som finns i vyn, så whenever någon som bor utanför stan eller bara gör något annat som är utanför 
-stan så syns inte karaktären. 
-
-* Gör en AI loop för karaktären så att den kan toggla mellan olika states enligt schema eller behov etc.
-
-* Gör action states för 1 karaktär 
+* Gör actions och score fns för 1 karaktär 
 
 1. åka ramp X
 2. äta ute ONS
@@ -22,7 +16,7 @@ stan så syns inte karaktären.
 11. Gå omkring 
 
 
-* Repetera ovan för alla andra karaktärer
+* Repetera ovan för fler karaktärer i syfte att täcka alla olika person behov 
 
 * Skapa relations and activities for that:
 

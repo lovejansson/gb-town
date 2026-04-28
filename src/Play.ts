@@ -16,7 +16,6 @@ import Bench from "./skate/Bench";
 import Obstacle, { BEHIND_RAMP_OFFSET, Flat, Ramp } from "./skate/Obstacle";
 import { createGrid } from "./grid";
 import { posToCell } from "./utils";
-import { getCollision } from "./lib/collision";
 
 const color1 = new Color("#1d0c24");
 const color2 = new Color("#63415f");
@@ -208,7 +207,7 @@ export default class Play extends Scene {
           this.zIndexMap.get(o.id)! * layerValueStep,
         );
       } else {
-        // Todo handle sorting of dynamic sprites that moves in the world by using their collisions with other objects. 
+        // Todo handle sorting of dynamic sprites that moves in the world by using their collisions with other objects.
         renderSortCompValue.set(o.id, o.pos.y);
       }
     }
@@ -216,29 +215,33 @@ export default class Play extends Scene {
     // Handle edge cases for when human is behind stuff
 
     for (const s of this.skaters) {
-      const obstacle = this.obstacles.find((o2) => o2.id === s.obstacle);
+      const currAction = s.getCurrentAction();
+
+      const obstacle = this.obstacles.find(
+        (o2) => o2.id === currAction.targetId,
+      );
 
       // Skater is currently at obstacle ramp and climbing it from behind so we need to increase the 'y' value to sort on so that it will be rendered first, i.e. the ramp will be rendered on top of this skater.
       if (obstacle !== undefined) {
         if (obstacle.type === "ramp") {
           const isBehindRamp =
             s.pos.y <= obstacle.pos.y + BEHIND_RAMP_OFFSET * this.art!.tileSize;
-          const isClimbing = s.action === "climb-ramp";
-
+          const isClimbing = currAction.currentAction === "climb-ramp";
+          const objSort = this.zIndexMap.get(obstacle.id)! * layerValueStep;
           if (isBehindRamp && isClimbing) {
-            const objSort = this.zIndexMap.get(obstacle.id)! * layerValueStep;
             renderSortCompValue.set(s.id, objSort - 1);
           } else {
-            renderSortCompValue.set(s.id, s.pos.y);
+            renderSortCompValue.set(s.id, objSort);
           }
           continue;
         }
       }
 
-      const bench = this.benches.find((o2) => o2.id === s.bench);
+      const bench = this.benches.find((o2) => o2.id === currAction.targetId);
 
-      if (bench !== undefined && s.action === "bench") {
-        renderSortCompValue.set(s.id, s.pos.y + 4);
+      if (bench !== undefined) {
+        const objSort = this.zIndexMap.get(bench.id)! * layerValueStep;
+        renderSortCompValue.set(s.id, objSort + 4);
         continue;
       }
 
@@ -251,7 +254,8 @@ export default class Play extends Scene {
         s.pos.x >= ramp.pos.x - this.art!.tileSize &&
         s.pos.x <= ramp.pos.x + ramp.width + this.art!.tileSize
       ) {
-        renderSortCompValue.set(s.id, ramp.pos.y - 1);
+        const objSort = this.zIndexMap.get(ramp.id)! * layerValueStep;
+        renderSortCompValue.set(s.id, objSort - 1);
         continue;
       }
       renderSortCompValue.set(s.id, s.pos.y);

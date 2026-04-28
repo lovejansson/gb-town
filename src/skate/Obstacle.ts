@@ -2,7 +2,7 @@ import { getRandomFreeCell } from "../grid";
 import { Scene, StaticImage } from "../lib";
 import type { Vec2 } from "../lib/types";
 import type Play from "../Play";
-import { cellToPos, posToCell, randomEl } from "../utils";
+import { cellToPos, randomEl } from "../utils";
 
 export type ObstacleType = "flat" | "ramp";
 
@@ -40,17 +40,11 @@ export const obstacleTricks: { [k in ObstacleType]: Trick[] } = {
 
 export default class Obstacle extends StaticImage {
   readonly type: ObstacleType;
-
   private queue: number[];
-
   private isFree: boolean;
-
   private numSkatersLimit: number;
-
   protected skaters: number[];
-
   private currSkater: number | null;
-
   protected tileSize: number;
 
   constructor(

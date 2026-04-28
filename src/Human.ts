@@ -1,7 +1,6 @@
 import { Scene, Sprite } from "./lib";
 import type { Direction, Vec2 } from "./lib/types";
-import type { ActionTag } from "./skate/SkatingAtPark";
-import SkatingAtPark from "./skate/SkatingAtPark";
+import UtilityAI from "./UtilityAI";
 
 export default class Human extends Sprite {
   static CRUISE_SPEED = 4;
@@ -12,35 +11,30 @@ export default class Human extends Sprite {
   i: number;
   tileSize: number;
   skill: number;
+  utility: UtilityAI;
 
-  skatingAtPark: SkatingAtPark;
-  obstacle: number | null;
-  bench: number | null;
-  action: ActionTag | null;
-  initAction: ActionTag;
 
   constructor(scene: Scene, pos: Vec2) {
+
     super(scene, pos, 16, 32, "s");
 
+    this.utility = new UtilityAI(this, ["skating-at-park", "beach"], "skating-at-park");
+
     this.tileSize = scene.art!.tileSize;
+
     this.skill = 8;
 
     this.tileSize = scene.art!.tileSize;
     this.drawOffset.y = -this.tileSize;
-    this.initAction = "flat";
 
     this.animations.registerSpritesheet("skater", {
       defaults: REPEAT_DEFAULTS,
     });
-    this.skatingAtPark = new SkatingAtPark(this);
-
-    this.obstacle = null;
-    this.bench = null;
-    this.action = this.initAction;
 
     this.tileSize = scene.art!.tileSize;
 
     this.i = 0;
+
     this.animations.onFrameChange = (
       name: string,
       currentFrame: number,
@@ -72,8 +66,12 @@ export default class Human extends Sprite {
   }
 
   update(dt: number): void {
-    this.skatingAtPark.update(dt);
+    this.utility.update(dt);
     this.updateVelocity();
+  }
+
+  getCurrentAction() {
+    return this.utility.getCurrentAction();
   }
 
   private updateVelocity() {

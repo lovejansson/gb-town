@@ -1,6 +1,6 @@
 import type Play from "../Play";
 import Skater from "../Human";
-import { posToCell, randomBool, randomEl, randomInt } from "../utils";
+import { randomBool, randomEl, randomInt } from "../utils";
 import { Path } from "../path";
 import Timer, { FIVE_MINUTES, TEN_MINUTES } from "../Timer";
 import Obstacle, {
@@ -34,9 +34,26 @@ export default class SkatingAtPark implements Updatable {
   private bench: Bench | null;
   private tileSize: number;
 
+  private transitionToAction(
+    nextAction: Updatable,
+    actionNode: {
+      parentAction: SubActionTag;
+      currentAction: SubActionTag;
+      targetId: number | null;
+      reason: string | null;
+    },
+  ) {
+    if (this.currAction !== null) {
+   
+      this.skater.utility.popAction();
+    }
+
+    this.currAction = nextAction;
+    this.skater.utility.pushAction(actionNode);
+  }
+
   constructor(skater: Skater) {
     this.skater = skater;
-    this.skater.action = this.tag;
     this.tileSize = this.skater.tileSize;
     this.tricks = tricks.slice(0, skater.skill - 1);
     this.obstacles = obstacles.filter((o) =>
@@ -50,7 +67,9 @@ export default class SkatingAtPark implements Updatable {
 
   update(dt: number): void {
     if (this.currAction === null) {
-      switch (this.skater.initAction) {
+      const firstAction = randomEl(["bench", "flat", "ramp"]);
+
+      switch (firstAction) {
         case "bench":
           this.bench = randomEl(
             (this.skater.scene as Play).benches.filter((o) => o.isFree),
@@ -60,26 +79,43 @@ export default class SkatingAtPark implements Updatable {
 
           this.obstacle = null;
 
-          this.currAction = createAction(CruiseTo.TAG, this.skater, {
-            x: this.bench.pos.x,
-            y: this.bench.pos.y + this.tileSize,
-          });
+          this.transitionToAction(
+            createAction(CruiseTo.TAG, this.skater, {
+              x: this.bench.pos.x,
+              y: this.bench.pos.y + this.tileSize,
+            }),
+            {
+              parentAction: this.tag,
+              currentAction: CruiseTo.TAG,
+              targetId: this.bench.id,
+              reason: "initial choice was bench; cruising to sit spot",
+            },
+          );
+
           break;
-      
+
         case "flat":
           this.obstacle = (this.skater.scene as Play).obstacles.find(
             (o) => o.type === "flat",
           )!;
           this.obstacle.arrive(this.skater.id);
 
-          this.currAction = createAction(
-            CruiseTo.TAG,
-            this.skater,
-            this.obstacle!.getArrivePos(
-              this.obstacle!.type === "ramp"
-                ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
-                : this.skater.pos,
+          this.transitionToAction(
+            createAction(
+              CruiseTo.TAG,
+              this.skater,
+              this.obstacle!.getArrivePos(
+                this.obstacle!.type === "ramp"
+                  ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
+                  : this.skater.pos,
+              ),
             ),
+            {
+              parentAction: this.tag,
+              currentAction: CruiseTo.TAG,
+              targetId: this.obstacle.id,
+              reason: "initial choice was flat obstacle; cruising to arrive point",
+            },
           );
           break;
         case "ramp":
@@ -88,52 +124,86 @@ export default class SkatingAtPark implements Updatable {
           )!;
           this.obstacle.arrive(this.skater.id);
 
-          this.currAction = createAction(
-            CruiseTo.TAG,
-            this.skater,
-            this.obstacle!.getArrivePos(
-              this.obstacle!.type === "ramp"
-                ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
-                : this.skater.pos,
+          this.transitionToAction(
+            createAction(
+              CruiseTo.TAG,
+              this.skater,
+              this.obstacle!.getArrivePos(
+                this.obstacle!.type === "ramp"
+                  ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
+                  : this.skater.pos,
+              ),
             ),
+            {
+              parentAction: this.tag,
+              currentAction: CruiseTo.TAG,
+              targetId: this.obstacle.id,
+              reason: "initial choice was ramp obstacle; cruising to arrive point",
+            },
           );
           break;
       }
     } else if (this.currAction.isComplete()) {
-      if (this.currAction.tag === CruiseTo.TAG) {
+      const completedActionTag = this.currAction.tag;
+      this.skater.utility.popAction();
+      this.currAction = null;
+
+      if (completedActionTag === CruiseTo.TAG) {
         if (this.obstacle !== null) {
-          this.skater.obstacle = this.obstacle.id;
           switch (this.obstacle.type) {
             case "flat":
-              this.currAction = createAction(
-                this.obstacle.type,
-                this.skater,
-                this.obstacle as Obstacle,
-                TEN_MINUTES,
+              this.transitionToAction(
+                createAction(
+                  this.obstacle.type,
+                  this.skater,
+                  this.obstacle as Obstacle,
+                  TEN_MINUTES,
+                ),
+                {
+                  parentAction: this.tag,
+                  currentAction: this.obstacle.type,
+                  targetId: this.obstacle.id,
+                  reason: "reached obstacle; start flat skating routine",
+                },
               );
               break;
             case "ramp":
-              this.currAction = createAction(
-                this.obstacle.type,
-                this.skater,
-                this.obstacle as Ramp,
-                TEN_MINUTES,
+              this.transitionToAction(
+                createAction(
+                  this.obstacle.type,
+                  this.skater,
+                  this.obstacle as Ramp,
+                  TEN_MINUTES,
+                ),
+                {
+                  parentAction: this.tag,
+                  currentAction: this.obstacle.type,
+                  targetId: this.obstacle.id,
+                  reason: "reached obstacle; start ramp skating routine",
+                },
               );
               break;
           }
         } else if (this.bench !== null) {
-          this.skater.bench = this.bench.id;
-          this.currAction = createAction(
-            SittingBench.TAG,
-            this.skater,
-            this.bench,
-            FIVE_MINUTES,
+          this.transitionToAction(
+            createAction(
+              SittingBench.TAG,
+              this.skater,
+              this.bench,
+              FIVE_MINUTES,
+            ),
+            {
+              parentAction: this.tag,
+              currentAction: SittingBench.TAG,
+              targetId: this.bench.id,
+              reason: "reached bench; switching to resting action",
+            },
           );
         } else {
           throw new Error("Invalid state: bench and obstacle is null");
         }
       } else {
-        if (this.currAction.tag === SittingBench.TAG) {
+        if (completedActionTag === SittingBench.TAG) {
           this.bench!.isFree === true;
           this.bench = null;
         } else {
@@ -164,14 +234,22 @@ export default class SkatingAtPark implements Updatable {
 
           this.obstacle!.arrive(this.skater.id);
 
-          this.currAction = createAction(
-            CruiseTo.TAG,
-            this.skater,
-            this.obstacle!.getArrivePos(
-              this.obstacle!.type === "ramp"
-                ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
-                : this.skater.pos,
+          this.transitionToAction(
+            createAction(
+              CruiseTo.TAG,
+              this.skater,
+              this.obstacle!.getArrivePos(
+                this.obstacle!.type === "ramp"
+                  ? (this.obstacle as Ramp).getMyIdlePos(this.skater.id)
+                  : this.skater.pos,
+              ),
             ),
+            {
+              parentAction: this.tag,
+              currentAction: CruiseTo.TAG,
+              targetId: this.obstacle!.id,
+              reason: "chose to keep skating and found an available obstacle",
+            },
           );
         } else if (hasFreeBenches) {
           this.bench = randomEl(
@@ -181,10 +259,18 @@ export default class SkatingAtPark implements Updatable {
           this.bench.isFree = false;
           this.obstacle = null;
 
-          this.currAction = createAction(CruiseTo.TAG, this.skater, {
-            x: this.bench.pos.x,
-            y: this.bench.pos.y + this.tileSize,
-          });
+          this.transitionToAction(
+            createAction(CruiseTo.TAG, this.skater, {
+              x: this.bench.pos.x,
+              y: this.bench.pos.y + this.tileSize,
+            }),
+            {
+              parentAction: this.tag,
+              currentAction: CruiseTo.TAG,
+              targetId: this.bench!.id,
+              reason: "no skate target picked; moving to an available bench",
+            },
+          );
         }
       }
     }
@@ -206,7 +292,6 @@ class FlatObstacle implements Updatable {
 
   constructor(skater: Skater, obstacle: Obstacle, ms: number) {
     this.skater = skater;
-    this.skater.action = this.tag;
     this.skater.direction = randomEl(["s", "n"]) as Direction;
 
     this.animationSeq = new AnimationSequence(
@@ -283,7 +368,7 @@ class ClimbRamp implements Updatable {
     climbUp: boolean,
   ) {
     this.skater = skater;
-    this.skater.action = this.tag;
+
     this.obstacle = obstacle;
     this.tileSize = this.skater.tileSize;
     this.rampSide = rampSide;
@@ -386,9 +471,26 @@ export class RampObstacle implements Updatable {
   private start: { pos: Vec2; rampSide: RampSide };
   private end: { pos: Vec2; rampSide: RampSide };
 
+  private transitionToAction(
+    nextAction: Updatable,
+    actionNode: {
+      parentAction: SubActionTag;
+      currentAction: SubActionTag;
+      targetId: number | null;
+      reason: string | null;
+    },
+  ) {
+    if (this.currAction !== null) {
+      this.skater.utility.popAction();
+    }
+
+    this.currAction = nextAction;
+    this.skater.utility.pushAction(actionNode);
+  }
+
   constructor(skater: Skater, obstacle: Ramp, ms: number) {
     this.skater = skater;
-    this.skater.action = this.tag;
+
     this.timer = new Timer();
     this.timer.start(ms);
     this.currAction = null;
@@ -403,33 +505,57 @@ export class RampObstacle implements Updatable {
 
   update(dt: number): void {
     if (this.currAction === null) {
-      this.currAction = createAction(
-        ClimbRamp.tag,
-        this.skater,
-        this.obstacle,
-        this.start.rampSide,
-        true,
-      );
-    } else if (this.currAction.isComplete()) {
-      if (this.timer.isStopped) {
-        this.setSkaterPosBeforeClimbDown();
-        this.currAction = createAction(
+      this.transitionToAction(
+        createAction(
           ClimbRamp.tag,
           this.skater,
           this.obstacle,
           this.start.rampSide,
-          false,
-        );
-      } else {
-        if (this.currAction.tag === ClimbRamp.tag) {
-          this.obstacle.standInLine(this.skater.id);
-          this.setSkaterPosBeforeWaitMyTurn();
-          this.currAction = createAction(
-            WaitingMyTurn.TAG,
+          true,
+        ),
+        {
+          parentAction: this.tag,
+          currentAction: ClimbRamp.tag,
+          targetId: this.obstacle.id,
+          reason: "starting ramp session by climbing to drop-in position",
+        },
+      );
+    } else if (this.currAction.isComplete()) {
+      const completedActionTag = this.currAction.tag;
+      this.skater.utility.popAction();
+      this.currAction = null;
+
+      if (this.timer.isStopped) {
+        this.setSkaterPosBeforeClimbDown();
+        this.transitionToAction(
+          createAction(
+            ClimbRamp.tag,
             this.skater,
             this.obstacle,
+            this.start.rampSide,
+            false,
+          ),
+          {
+            parentAction: this.tag,
+            currentAction: ClimbRamp.tag,
+            targetId: this.obstacle.id,
+            reason: "session timer ended; climbing down to exit ramp",
+          },
+        );
+      } else {
+        if (completedActionTag === ClimbRamp.tag) {
+          this.obstacle.standInLine(this.skater.id);
+          this.setSkaterPosBeforeWaitMyTurn();
+          this.transitionToAction(
+            createAction(WaitingMyTurn.TAG, this.skater, this.obstacle),
+            {
+              parentAction: this.tag,
+              currentAction: WaitingMyTurn.TAG,
+              targetId: this.obstacle.id,
+              reason: "finished climb; waiting in line for next turn",
+            },
           );
-        } else if (this.currAction.tag === WaitingMyTurn.TAG) {
+        } else if (completedActionTag === WaitingMyTurn.TAG) {
           // After WaitingMyTurn we got a new idle position assigned to the skater where they should end the round
 
           const idlePos = this.obstacle.getMyIdlePos(this.skater.id);
@@ -437,14 +563,22 @@ export class RampObstacle implements Updatable {
 
           this.end = { pos: idlePos, rampSide };
 
-          this.currAction = createAction(
-            RampTricks.TAG,
-            this.skater,
-            this.obstacle,
-            this.start,
-            this.end,
+          this.transitionToAction(
+            createAction(
+              RampTricks.TAG,
+              this.skater,
+              this.obstacle,
+              this.start,
+              this.end,
+            ),
+            {
+              parentAction: this.tag,
+              currentAction: RampTricks.TAG,
+              targetId: this.obstacle.id,
+              reason: "turn granted; begin ramp trick run",
+            },
           );
-        } else if (this.currAction.tag === RampTricks.TAG) {
+        } else if (completedActionTag === RampTricks.TAG) {
           this.obstacle.endSkate(this.skater.id);
           this.obstacle.standInLine(this.skater.id);
 
@@ -452,16 +586,20 @@ export class RampObstacle implements Updatable {
           this.start = { ...this.end };
 
           this.setSkaterPosBeforeWaitMyTurn();
-          this.currAction = createAction(
-            WaitingMyTurn.TAG,
-            this.skater,
-            this.obstacle,
+          this.transitionToAction(
+            createAction(WaitingMyTurn.TAG, this.skater, this.obstacle),
+            {
+              parentAction: this.tag,
+              currentAction: WaitingMyTurn.TAG,
+              targetId: this.obstacle.id,
+              reason: "completed run; rejoin queue for another turn",
+            },
           );
         }
       }
     }
 
-    this.currAction.update(dt);
+    if (this.currAction !== null) this.currAction.update(dt);
   }
 
   private setSkaterPosBeforeWaitMyTurn() {
@@ -525,7 +663,7 @@ class RampTricks implements Updatable {
     end: { pos: Vec2; rampSide: RampSide },
   ) {
     this.skater = skater;
-    this.skater.action = this.tag;
+
     this.tileSize = this.skater.tileSize;
     this.obstacle = obstacle;
 
@@ -745,7 +883,6 @@ class CruiseTo implements Updatable {
 
   constructor(skater: Skater, to: Vec2) {
     this.skater = skater;
-    this.skater.action = this.tag;
 
     console.log(to);
 
@@ -762,7 +899,6 @@ class CruiseTo implements Updatable {
   }
 
   update(dt: number): void {
-
     if (this.path.hasReachedGoal) {
       if (!this.animSeq) {
         this.animSeq = new AnimationSequence(
@@ -790,11 +926,15 @@ class CruiseTo implements Updatable {
         this.animSeq.start();
       }
 
-      console.log("UPDATING ANIM SEQ", this.animSeq.isFinished, this.animSeq.hasStarted())
+      console.log(
+        "UPDATING ANIM SEQ",
+        this.animSeq.isFinished,
+        this.animSeq.hasStarted(),
+      );
       this.animSeq.update(dt);
     } else {
       const anim = this.skater.animations.getPlaying();
-     
+
       if (anim === null || !anim.includes(`-${this.skater.direction}`)) {
         if (this.skater.direction === "e") {
           this.skater.animations.play(`cruise-b-${this.skater.direction}`);
@@ -827,7 +967,7 @@ class WaitingMyTurn implements Updatable {
 
   constructor(skater: Skater, obstacle: Obstacle) {
     this.skater = skater;
-    this.skater.action = this.tag;
+
     this.obstacle = obstacle;
     this.timer = new Timer();
     this.timer.start(1000 * 3);
@@ -871,7 +1011,7 @@ class SittingBench implements Updatable {
 
   constructor(skater: Skater, bench: Bench, duration: number) {
     this.skater = skater;
-    this.skater.action = this.tag;
+
     this.bench = bench;
     this.timer = new Timer();
     this.timer.start(duration);
@@ -903,7 +1043,7 @@ class SittingBench implements Updatable {
   }
 }
 
-export type ActionTag =
+export type SubActionTag =
   | "skating-at-park"
   | "bench"
   | "cruise-to"
@@ -934,7 +1074,7 @@ type ActionParams = {
   ramp: [skater: Skater, obstacle: Ramp, ms: number];
 };
 
-const ActionConstructors: { [T in ActionTag]: UpdatableConstructor<T> } = {
+const ActionConstructors: { [T in SubActionTag]: UpdatableConstructor<T> } = {
   "skating-at-park": SkatingAtPark,
   bench: SittingBench,
   "cruise-to": CruiseTo,
@@ -945,17 +1085,17 @@ const ActionConstructors: { [T in ActionTag]: UpdatableConstructor<T> } = {
   ramp: RampObstacle,
 };
 
-interface UpdatableConstructor<T extends ActionTag> {
+interface UpdatableConstructor<T extends SubActionTag> {
   new (...args: ActionParams[T]): Updatable;
 }
 
 export interface Updatable {
-  readonly tag: ActionTag;
+  readonly tag: SubActionTag;
   update(dt: number): void;
   isComplete(): boolean;
 }
 
-function createAction<T extends ActionTag>(
+function createAction<T extends SubActionTag>(
   tag: T,
   ...args: ActionParams[T]
 ): Updatable {
