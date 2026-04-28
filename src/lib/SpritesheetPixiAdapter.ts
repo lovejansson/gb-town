@@ -49,9 +49,10 @@ export default class SpritesheetPixiAdapter implements SpritesheetAdapter<
    * @throws SpritesheetNotAddedError if the texture has not been created yet.
    */
   getSpritesheet(name: string): Spritesheet<PixiJSON> {
-    const s = this.spritesheets.get(name);
-    if (!s) throw new SpritesheetNotAddedError(name);
-    return s;
+    const spritesheet = this.spritesheets.get(name);
+  
+    if (!spritesheet) throw new SpritesheetNotAddedError(name);
+    return spritesheet;
   }
 
   private convertAsepriteToPixie(spritesheet: AsepriteJSON): PixiJSON {

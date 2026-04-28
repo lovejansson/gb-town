@@ -32,21 +32,9 @@ export type FrameChangeCallback = (
 export type LoopCallback = (animation: string, loopCount: number) => void;
 export type CompleteCallback = (animation: string) => void;
 
-export type AnimationDefaults = Record<
-  string,
-  { repeat: number | boolean }
->;
-
-export type RegisterSpritesheetOptions = {
-  defaults?: AnimationDefaults;
-  onFrameChange?: FrameChangeCallback | null;
-  onLoop?: LoopCallback | null;
-  onComplete?: CompleteCallback | null;
+export type AnimationOptionsDefaults = {
+  defaults: Record<string, { repeat: number | boolean }>;
 };
-
-export type RegisterSpritesheetInput =
-  | AnimationDefaults
-  | RegisterSpritesheetOptions;
 
 type Adapter = AnimationCanvasAdapter | AnimationPixiAdapter;
 
@@ -55,7 +43,10 @@ export default class AnimationManager {
 
   constructor(sprite: Sprite) {
     // Compare against string literal to avoid importing Art (which would create a circular dep)
-    if (sprite.scene.getRenderMode() === "canvas" || _AnimationPixiAdapterClass === null) {
+    if (
+      sprite.scene.getRenderMode() === "canvas" ||
+      _AnimationPixiAdapterClass === null
+    ) {
       this.adapter = new AnimationCanvasAdapter(sprite);
     } else {
       this.adapter = new _AnimationPixiAdapterClass(sprite);
@@ -68,10 +59,8 @@ export default class AnimationManager {
     }
   }
 
-  registerSpritesheet(
-    key: string,
-    options?: RegisterSpritesheetInput,
-  ): void {
+
+  registerSpritesheet(key: string, options?: AnimationOptionsDefaults): void {
     this.adapter.registerSpritesheet(key, options);
   }
 

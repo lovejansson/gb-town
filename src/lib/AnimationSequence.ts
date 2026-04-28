@@ -97,6 +97,7 @@ export default class AnimationSequence {
 
     switch (playingAnim.type) {
       case TransitionType.Distance: {
+        
         const targetDx = playingAnim.anim.transition.dx;
         const targetDy = playingAnim.anim.transition.dy;
         const spriteDx = this.sprite.pos.x - playingAnim.x;
@@ -111,7 +112,9 @@ export default class AnimationSequence {
               Math.abs(spriteDy) >= Math.abs(targetDy)));
 
         if (hasReached) {
+
           this.currIdx++;
+
           if (this.currIdx === this.sequence.length) {
             this.isFinished = true;
           } else {

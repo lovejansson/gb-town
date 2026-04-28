@@ -1,37 +1,33 @@
 
-#Todo 
-
+# Todo 
 
 Gör en mindre simulering som inkluderar huvud AI loopen men som bara visar leisure activites, 
 eller det som finns i vyn, så whenever någon som bor utanför stan eller bara gör något annat som är utanför 
 stan så syns inte karaktären. 
 
-
-* Add Animation manager canvas version into the lib 
-
-* Start doing ramp sim with 1 skater which goes up down the ramp
+* Gör en AI loop för karaktären så att den kan toggla mellan olika states enligt schema eller behov etc.
 
 * Gör action states för 1 karaktär 
 
-1. åka ramp
-2. äta ute 
+1. åka ramp X
+2. äta ute ONS
 3. åka ferry wheel
-4. arcade
+4. Göra ett ärende i en butik 
 5. dricka
 6. Sola
 7. Simma
 8. Bada
 9. Sitta i skogen
-10. Göra ett ärende i en butik 
-11. Cykla omkring 
-12. Gå omkring 
+10. Cykla omkring 
+11. Gå omkring 
 
-* Gör en AI loop för karaktären 
 
 * Repetera ovan för alla andra karaktärer
 
 * Skapa relations and activities for that:
-- Gör allt ovan fast med någon annan 
+
+- Gör allt ovan fast med någon annan
+
 - Sparka/kasta boll
 
 

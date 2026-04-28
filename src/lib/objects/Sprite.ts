@@ -5,12 +5,7 @@ import type { Vec2, Direction } from "../types.ts";
 import { posToCell } from "../utils.ts";
 
 export default abstract class Sprite extends ArtObject {
-  pos: Vec2;
   vel: Vec2;
-  width: number;
-  height: number;
-  halfWidth: number;
-  halfHeight: number;
   direction: Direction;
   animations: AnimationManager;
   drawOffset: Vec2;
@@ -22,14 +17,10 @@ export default abstract class Sprite extends ArtObject {
     height: number,
     direction: Direction,
   ) {
-    super(scene);
-    this.pos = pos;
+    super(scene, pos, width, height);
+
     this.vel = { x: 0, y: 0 };
-    this.width = width;
-    this.height = height;
     this.direction = direction;
-    this.halfWidth = width / 2;
-    this.halfHeight = height / 2;
     this.animations = new AnimationManager(this);
     this.drawOffset = { x: 0, y: 0 };
   }

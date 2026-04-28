@@ -11,24 +11,13 @@ import { type ContainerChild } from "pixi.js";
  * 
  */
 export default abstract class ShaderObject extends ArtObject {
-  pos: Vec2;
-  width: number;
-  height: number;
-  halfWidth: number;
-  halfHeight: number;
-
   constructor(
     scene: Scene,
     pos: Vec2,
     width: number,
     height: number,
   ) {
-    super(scene);
-    this.pos = pos;
-    this.width = width;
-    this.height = height;
-    this.halfWidth = width / 2;
-    this.halfHeight = height / 2;
+    super(scene, pos, width, height);
   }
 
   abstract getPixiContainer(): ContainerChild;

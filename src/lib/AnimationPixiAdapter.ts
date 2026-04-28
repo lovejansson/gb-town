@@ -2,12 +2,12 @@ import { type FrameObject, AnimatedSprite, Spritesheet } from "pixi.js";
 import type Sprite from "./objects/Sprite.ts";
 import type {
   AnimationOptions,
+  AnimationOptionsDefaults,
   CompleteCallback,
   FrameChangeCallback,
   LoopCallback,
-  RegisterSpritesheetOptions,
 } from "./AnimationManager.ts";
-import {type  PixiJSON } from "./SpritesheetsManager.ts";
+import { type PixiJSON } from "./SpritesheetsManager.ts";
 
 export default class AnimationPixiAdapter {
   private sprite: Sprite;
@@ -35,29 +35,44 @@ export default class AnimationPixiAdapter {
     this.animatedSpriteOverlay = overlay;
   }
 
-  registerSpritesheet(
-    key: string,
-    options?: RegisterSpritesheetOptions,
-  ): void {
-    const normalized = options ?? {};
-    const s = this.sprite.scene.art!.spritesheets.get(key) as Spritesheet<PixiJSON>;
+  registerSpritesheet(key: string, options?: AnimationOptionsDefaults): void {
+    const spritesheet = this.sprite.scene.art!.spritesheets.get(
+      key,
+    ) as Spritesheet<PixiJSON>;
 
-    for (const [name, textures] of Object.entries(s.animations)) {
+    for (const [name, textures] of Object.entries(spritesheet.animations)) {
       this.animations.set(
         name,
         textures.map((texture) => ({
           texture,
-          time: s.data.frames[texture.label!].duration,
+          time: spritesheet.data.frames[texture.label!].duration,
         })),
       );
 
-      if (normalized.defaults?.[name] !== undefined) {
-        this.defaults.set(name, normalized.defaults[name]);
+      // Pixi is not firing events for 1 frame animations so I duplicate these here to get events
+
+      if (textures.length === 1) {
+        this.animations.get(name)?.push(
+          ...textures.map((texture) => ({
+            texture,
+            time: spritesheet.data.frames[texture.label!].duration,
+          })),
+        );
+      }
+
+      if (options?.defaults?.[name] !== undefined) {
+        this.defaults.set(name, options.defaults[name]);
       }
     }
   }
 
   play(name: string, options?: AnimationOptions): void {
+    if (this.animatedSprite === null || this.animatedSpriteOverlay === null) {
+      throw new Error(
+        `AnimatedSprite not initialized for sprite "${this.sprite.id}". Add sprite to scene before calling play().`,
+      );
+    }
+
     const anim = this.animations.get(name);
     if (!anim) throw new AnimationNotAddedError(name);
 
@@ -68,12 +83,6 @@ export default class AnimationPixiAdapter {
 
     const repeat = options?.repeat ?? this.defaults.get(name)?.repeat ?? false;
 
-    if (this.animatedSprite === null) {
-      throw new Error(
-        `AnimatedSprite not initialized for "${name}". Add sprite to scene before calling play().`,
-      );
-    }
-
     this.currentAnimation = name;
     this.loopCount = 0;
 
@@ -82,34 +91,41 @@ export default class AnimationPixiAdapter {
     this.animatedSprite.visible = true;
     this.animatedSprite.play();
 
-    if (animOverlay !== undefined && this.animatedSpriteOverlay !== null) {
+    if (animOverlay !== undefined) {
       this.animatedSpriteOverlay.textures = animOverlay;
       this.animatedSpriteOverlay.visible = true;
       this.animatedSpriteOverlay.gotoAndStop(0);
+    } else {
+      this.animatedSpriteOverlay.visible = false;
     }
 
-    if (this.animatedSpriteOverlay !== null && options?.overlay?.drawBehind) {
-      this.sprite.scene.addPixiChild(this.animatedSpriteOverlay);
-    }
-
-    this.sprite.scene.addPixiChild(this.animatedSprite);
-
-    if (this.animatedSpriteOverlay !== null && options?.overlay?.drawOnTop) {
-      this.sprite.scene.addPixiChild(this.animatedSpriteOverlay);
+    if (this.animatedSpriteOverlay !== null && animOverlay !== undefined) {
+      if (options?.overlay?.drawBehind) {
+        this.animatedSpriteOverlay.zIndex = this.animatedSprite.zIndex - 1;
+      } else if (options?.overlay?.drawOnTop) {
+        this.animatedSpriteOverlay.zIndex = this.animatedSprite.zIndex + 1;
+      }
     }
 
     this.animatedSprite.onLoop = () => {
-      if (this.animatedSprite === null || this.currentAnimation === null) return;
+      if (this.animatedSprite === null || this.currentAnimation === null)
+        return;
+
       this.loopCount++;
       if (this.onLoop) this.onLoop(this.currentAnimation, this.loopCount);
 
       if (this.animatedSprite.totalFrames === 1 && this.onFrameChange) {
-        this.onFrameChange(this.currentAnimation, 0, this.animatedSprite.totalFrames);
+        this.onFrameChange(
+          this.currentAnimation,
+          0,
+          this.animatedSprite.totalFrames,
+        );
       }
     };
 
     this.animatedSprite.onComplete = () => {
-      if (this.animatedSprite === null || this.currentAnimation === null) return;
+      if (this.animatedSprite === null || this.currentAnimation === null)
+        return;
 
       if (typeof repeat === "number") {
         this.loopCount++;
@@ -131,11 +147,13 @@ export default class AnimationPixiAdapter {
         }
       } else {
         if (this.onComplete) this.onComplete(this.currentAnimation);
+        this.currentAnimation = null;
       }
     };
 
     this.animatedSprite.onFrameChange = (currFrame: number) => {
-      if (this.currentAnimation === null || this.animatedSprite === null) return;
+      if (this.currentAnimation === null || this.animatedSprite === null)
+        return;
 
       if (this.onFrameChange) {
         this.onFrameChange(
@@ -145,17 +163,20 @@ export default class AnimationPixiAdapter {
         );
       }
 
-      this.animatedSprite.position.set(this.sprite.pos.x, this.sprite.pos.y);
+      this.animatedSprite.position.set(this.sprite.pos.x, this.sprite.pos.y + this.sprite.drawOffset.y);
 
       if (this.animatedSpriteOverlay !== null) {
         this.animatedSpriteOverlay.position.set(
           this.sprite.pos.x + (options?.overlay?.dx ?? 0),
-          this.sprite.pos.y + (options?.overlay?.dy ?? 0),
+          this.sprite.pos.y + (options?.overlay?.dy ?? 0) + this.sprite.drawOffset.y,
         );
 
         if (this.animatedSpriteOverlay.visible) {
           const mainTotal = Math.max(this.animatedSprite.totalFrames, 1);
-          const overlayTotal = Math.max(this.animatedSpriteOverlay.totalFrames, 1);
+          const overlayTotal = Math.max(
+            this.animatedSpriteOverlay.totalFrames,
+            1,
+          );
           const progress = mainTotal <= 1 ? 0 : currFrame / (mainTotal - 1);
           const overlayFrame = Math.min(
             overlayTotal - 1,
@@ -165,10 +186,6 @@ export default class AnimationPixiAdapter {
         }
       }
     };
-
-    if (this.onFrameChange) {
-      this.onFrameChange(name, 0, this.animatedSprite.totalFrames);
-    }
   }
 
   stop(name: string): void {
@@ -180,7 +197,7 @@ export default class AnimationPixiAdapter {
     }
   }
 
-  // No-ops — Pixi drives its own timing via AnimatedSprite
+  // Not needed since pixi handles animation update internally
   update(_dt: number): void {}
   draw(_ctx: CanvasRenderingContext2D): void {}
 

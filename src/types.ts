@@ -18,5 +18,6 @@ export type Tilemap = {
     height: number;
     pos: Vec2;
     name: string;
+    layerIdx: number;
   }[];
 };

@@ -1,5 +1,7 @@
 import { Scene, Sprite } from "./lib";
 import type { Direction, Vec2 } from "./lib/types";
+import type { ActionTag } from "./skate/SkatingAtPark";
+import SkatingAtPark from "./skate/SkatingAtPark";
 
 export default class Human extends Sprite {
   static CRUISE_SPEED = 4;
@@ -7,15 +9,38 @@ export default class Human extends Sprite {
   static TRICK_SPEED = 4;
   static WALK_SPEED = 1;
 
+  i: number;
   tileSize: number;
+  skill: number;
+
+  skatingAtPark: SkatingAtPark;
+  obstacle: number | null;
+  bench: number | null;
+  action: ActionTag | null;
+  initAction: ActionTag;
 
   constructor(scene: Scene, pos: Vec2) {
     super(scene, pos, 16, 32, "s");
 
     this.tileSize = scene.art!.tileSize;
+    this.skill = 8;
 
-    this.animations.registerSpritesheet("skater", REPEAT_DEFAULTS);
+    this.tileSize = scene.art!.tileSize;
+    this.drawOffset.y = -this.tileSize;
+    this.initAction = "flat";
 
+    this.animations.registerSpritesheet("skater", {
+      defaults: REPEAT_DEFAULTS,
+    });
+    this.skatingAtPark = new SkatingAtPark(this);
+
+    this.obstacle = null;
+    this.bench = null;
+    this.action = this.initAction;
+
+    this.tileSize = scene.art!.tileSize;
+
+    this.i = 0;
     this.animations.onFrameChange = (
       name: string,
       currentFrame: number,
@@ -23,7 +48,7 @@ export default class Human extends Sprite {
     ) => {
       const updateType = AnimationPositionUpdates[name];
 
-      if (updateType === undefined) return; // overlay or unknown
+      if (updateType === undefined) return; // overlay or unregistered animation
 
       if (updateType === PositionUpdateType.VEL) {
         this.pos.x += this.vel.x;
@@ -33,18 +58,82 @@ export default class Human extends Sprite {
         const xDirMultiplier = name.includes("-w") ? -1 : 1;
         // const yDirMultiplier = name.includes("-s") ? -1 : 1;
 
-        const motion = Motions[name];
+        const motionKey = resolveMotionKey(name);
+        if (motionKey) {
+          const motion = Motions[motionKey];
 
-        if (motion) {
-          this.pos.x += motion[currentFrame].dx * xDirMultiplier;
-          this.pos.y += motion[currentFrame].dy;
+          if (motion) {
+            this.pos.x += motion[currentFrame].dx * xDirMultiplier;
+            this.pos.y += motion[currentFrame].dy;
+          }
         }
       }
     };
   }
 
   update(dt: number): void {
-    // this.animations.update(dt);
+    this.skatingAtPark.update(dt);
+    this.updateVelocity();
+  }
+
+  private updateVelocity() {
+    const animName = this.animations.currentAnimation;
+
+    if (animName !== null) {
+      let speed = 1;
+
+      if (
+        animName.includes("cruise-ramp") ||
+        animName.includes("cruise-bowl")
+      ) {
+        speed = 0;
+      } else if (animName.includes("cruise")) {
+        speed = Human.CRUISE_SPEED;
+      } else if (animName.includes("grind")) {
+        speed = Human.GRIND_SPEED;
+      } else if (
+        animName.includes("idle") ||
+        animName.startsWith("flip") ||
+        animName.includes("prep")
+      ) {
+        speed = 0;
+      } else if (animName.includes("walk")) {
+        // velocity is updated in Path right now though
+
+        speed = 1;
+        if (this.direction === "e" || this.direction === "w") {
+          speed = 2;
+        }
+      } else if (
+        animName.includes("kickflip") ||
+        animName.includes("shove-it") ||
+        animName.includes("ollie") ||
+        animName.includes("360") ||
+        animName.includes("180") ||
+        animName.includes("180")
+      ) {
+        speed = 0;
+      }
+
+      switch (this.direction) {
+        case "n":
+          this.vel.y = -speed;
+          this.vel.x = 0;
+          break;
+        case "e":
+          this.vel.x = speed;
+          this.vel.y = 0;
+          break;
+        case "s":
+          this.vel.y = speed;
+          this.vel.x = 0;
+          break;
+        case "w":
+          this.vel.x = -speed;
+          this.vel.y = 0;
+          break;
+      }
+    }
   }
 
   getEstimatedDistanceForAnim(name: string, vel?: Vec2): Vec2 {
@@ -365,8 +454,10 @@ function resolveMotionKey(name: string): string | null {
   if (name.startsWith("cruise-bowl-s")) return "cruise-bowl-s";
   if (name.startsWith("cruise-bowl-n")) return "cruise-bowl-n";
   if (name.startsWith("cruise-bowl")) return "cruise-bowl-h";
-  if (name.startsWith("jump-up")) return `jump-up-${name.includes("-e") ? "e" : "w"}`;
-  if (name.startsWith("jump-down")) return `jump-down-${name.includes("-e") ? "e" : "w"}`;
+  if (name.startsWith("jump-up"))
+    return `jump-up-${name.includes("-e") ? "e" : "w"}`;
+  if (name.startsWith("jump-down"))
+    return `jump-down-${name.includes("-e") ? "e" : "w"}`;
   if (name.startsWith("ramp-land")) return null; // no delta data
   return name; // kickflip-f, shove-it-b, etc. match directly
 }
@@ -434,151 +525,3 @@ const Motions: Record<string, { dx: number; dy: number }[]> = {
   "shove-it-f": Array(4).fill({ dx: -2, dy: 0 }),
   "shove-it-b": Array(4).fill({ dx: 2, dy: 0 }),
 };
-
-// function createAnimationsFromAseprite(
-//   asepriteData: AsepriteJSON,
-//   animationSettings: Record<
-//     string,
-//     | { driver: PositionUpdateType; repeat: number | boolean; isAnim: true }
-//     | { isAnim: false }
-//   >,
-// ): {
-//   animations: Record<string, AnimationConfigT<PositionUpdateType>>;
-//   overlays: Record<string, AnimationOverlay>;
-// } {
-//   const animations: Record<string, AnimationConfigT<PositionUpdateType>> = {};
-//   const overlays: Record<string, AnimationOverlay> = {};
-
-//   for (const tag of asepriteData.meta.frameTags) {
-//     const settings = animationSettings[tag.name] || {
-//       driver: PositionUpdateType.Vel,
-//       repeat: true,
-//     };
-
-//     if (settings.isAnim) {
-//       const frames: AnimationFrame[] = [];
-
-//       const direction = tag.name.match(/\-{1}([n, e, s, w, c])\-?/)?.at(1);
-//       const xDirMultiplier = tag.name.includes("-w") ? -1 : 1;
-
-//       for (let i = tag.from; i <= tag.to; i++) {
-//         const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
-
-//         if (!frame)
-//           throw new Error("Missing frame data for tag frame " + tag.name);
-
-//         const frameData = frame.frame;
-//         const duration = frame.duration;
-
-//         // Add motion for animations that have predefined deltas for each animation frame
-
-//         if (settings.driver === PositionUpdateType.DELTA) {
-//           const isCruiseRamp = tag.name.startsWith("cruise-ramp");
-//           const isCruiseBowl = tag.name.startsWith("cruise-bowl");
-//           const isLandRamp = tag.name.startsWith("ramp-land");
-//           const isJump = tag.name.startsWith("jump");
-
-//           if (isCruiseRamp) {
-//             const delta = Motions["cruise-ramp"][i - tag.from];
-//             frames.push({
-//               spritesheetX: frameData.x,
-//               spritesheetY: frameData.y,
-//               duration,
-//               dx: delta.dx * xDirMultiplier,
-//               dy: delta.dy,
-//             });
-//           } else if (isCruiseBowl) {
-//             if (direction === "s" || direction === "n") {
-//               const motion = Motions["cruise-bowl-" + direction];
-
-//               for (const d of motion) {
-//                 frames.push({
-//                   spritesheetX: frameData.x,
-//                   spritesheetY: frameData.y,
-//                   duration,
-//                   dx: d.dx,
-//                   dy: d.dy,
-//                 });
-//               }
-//             } else {
-//               const delta = Motions[`cruise-bowl-h`][i - tag.from];
-//               frames.push({
-//                 spritesheetX: frameData.x,
-//                 spritesheetY: frameData.y,
-//                 duration,
-//                 dx: delta.dx * xDirMultiplier,
-//                 dy: delta.dy,
-//               });
-//             }
-//           } else if (isLandRamp) {
-//             for (const { dx, dy } of [{ dy: 0, dx: 0 * xDirMultiplier }]) {
-//               frames.push({
-//                 spritesheetX: frameData.x,
-//                 spritesheetY: frameData.y,
-//                 duration: 500,
-//                 dx,
-//                 dy,
-//               });
-//             }
-//           } else if (isJump) {
-//             if (direction === undefined)
-//               throw new Error("No direction found in jump anim");
-//             const upDown = tag.name.includes("up") ? "up" : "down";
-//             const motion = Motions[`jump-${upDown}-${direction}`];
-
-//             for (const d of motion) {
-//               frames.push({
-//                 spritesheetX: frameData.x,
-//                 spritesheetY: frameData.y,
-//                 duration,
-//                 dx: d.dx,
-//                 dy: d.dy,
-//               });
-//             }
-//           } else {
-//             const delta = Motions[tag.name][i - tag.from];
-
-//             frames.push({
-//               spritesheetX: frameData.x,
-//               spritesheetY: frameData.y,
-//               duration,
-//               ...delta,
-//             });
-//           }
-//         } else {
-//           frames.push({
-//             spritesheetX: frameData.x,
-//             spritesheetY: frameData.y,
-//             duration,
-//           });
-//         }
-//       }
-
-//       animations[tag.name] = {
-//         positionUpdateType: settings.driver,
-//         repeat: settings.repeat,
-//         spritesheet: "skater",
-//         frames,
-//       };
-//     } else {
-//       const frames: { spritesheetX: number; spritesheetY: number }[] = [];
-
-//       for (let i = tag.from; i <= tag.to; i++) {
-//         const frame = asepriteData.frames[`${tag.name}-${i - tag.from}`];
-//         if (!frame) throw new Error("Missing frame data for tag frame");
-//         const frameData = frame.frame;
-//         frames.push({
-//           spritesheetX: frameData.x,
-//           spritesheetY: frameData.y,
-//         });
-//       }
-
-//       overlays[tag.name] = {
-//         spritesheet: "skater",
-//         frames,
-//       };
-//     }
-//   }
-
-//   return { animations, overlays };
-// }

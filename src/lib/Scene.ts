@@ -141,6 +141,7 @@ export default abstract class Scene {
       overlay.zIndex = this.objects.length - 1;
       obj.animations.attachPixiSprites(main, overlay);
       this.addPixiChild(main);
+      this.addPixiChild(overlay);
       // overlay starts detached; AnimationManager adds it when play() sets drawBehind/drawOnTop
       this.pixiObjects.set(obj.id, [main, overlay]);
       return;
@@ -165,25 +166,27 @@ export default abstract class Scene {
   }
 
   private syncPixiChild(obj: ArtObject): void {
-    const visuals = this.pixiObjects.get(obj.id);
-    if (!visuals) return;
+    const pixiObjects = this.pixiObjects.get(obj.id);
+    if (!pixiObjects) return;
 
-    if (obj instanceof StaticImage && visuals[0] instanceof _pixi!.Sprite) {
-      visuals[0].position.set(obj.pos.x, obj.pos.y);
-      if (visuals[0].width !== obj.width) visuals[0].width = obj.width;
-      if (visuals[0].height !== obj.height) visuals[0].height = obj.height;
+    if (obj instanceof StaticImage && pixiObjects[0] instanceof _pixi!.Sprite) {
+      pixiObjects[0].position.set(obj.pos.x, obj.pos.y);
+      if (pixiObjects[0].width !== obj.width) pixiObjects[0].width = obj.width;
+      if (pixiObjects[0].height !== obj.height) pixiObjects[0].height = obj.height;
       return;
     }
 
-    if (obj instanceof Sprite && visuals[0] instanceof _pixi!.AnimatedSprite) {
-      visuals[0].position.set(obj.pos.x, obj.pos.y);
-      if (visuals[0].width !== obj.width) visuals[0].width = obj.width;
-      if (visuals[0].height !== obj.height) visuals[0].height = obj.height;
+    if (obj instanceof Sprite && pixiObjects[0] instanceof _pixi!.AnimatedSprite) {
+     
+      if (pixiObjects[0].width !== obj.width) pixiObjects[0].width = obj.width;
+      if (pixiObjects[0].height !== obj.height) pixiObjects[0].height = obj.height;
+
+      // OBS the position of the animated sprite is updated insideof the animation manager to be able to also set the overlay position correctly
       return;
     }
 
     if (obj instanceof ShaderObject) {
-      visuals[0].position.set(obj.pos.x, obj.pos.y);
+      pixiObjects[0].position.set(obj.pos.x, obj.pos.y);
     }
   }
 

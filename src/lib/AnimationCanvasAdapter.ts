@@ -1,10 +1,10 @@
 import type Sprite from "./objects/Sprite.ts";
 import type {
   AnimationOptions,
+  AnimationOptionsDefaults,
   CompleteCallback,
   FrameChangeCallback,
   LoopCallback,
-  RegisterSpritesheetOptions,
 } from "./AnimationManager.ts";
 import type { SpritesheetCanvas } from "./SpritesheetsManager.ts";
 
@@ -61,7 +61,7 @@ export default class AnimationCanvasAdapter {
 
   registerSpritesheet(
     key: string,
-    options?: RegisterSpritesheetOptions,
+    options?: AnimationOptionsDefaults,
   ): void {
 
     const sheet = this.sprite.scene.art!.spritesheets.get(

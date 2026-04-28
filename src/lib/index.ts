@@ -8,12 +8,7 @@ export { default as AmbientSprite } from "./objects/AmbientSprite.ts";
 export { default as Scene } from "./Scene.ts";
 export { default as ArtObject } from "./objects/ArtObject.ts";
 export { default as ShaderObject } from "./objects/ShaderObject.ts";
-export {
-  type Vec2,
-  type Cell,
-  type Direction,
-
-} from "./types.ts";
+export { type Vec2, type Cell, type Direction } from "./types.ts";
 
 export {
   type AsepriteJSON,
@@ -22,3 +17,9 @@ export {
   type AsepriteLayer,
   type AsepriteMeta,
 } from "./SpritesheetsManager.ts";
+
+export {
+  default as AnimationSequence,
+  TransitionType,
+  type SequenceAnimation,
+} from "./AnimationSequence.ts";

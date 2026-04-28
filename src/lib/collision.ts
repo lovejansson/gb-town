@@ -1,6 +1,4 @@
 import ArtObject from "./objects/ArtObject.ts";
-import Sprite from "./objects/Sprite.ts";
-import StaticImage from "./objects/StaticImage.ts";
 
 export type CollisionResult = {
     obj: ArtObject;
@@ -11,7 +9,7 @@ export type CollisionResult = {
 /**
  * Axis-Aligned Bounding Box (AABB) collision detection
  */
-export function getCollision(obj1: Sprite | StaticImage, obj2: Sprite | StaticImage): CollisionResult | null {
+export function getCollision(obj1: ArtObject, obj2: ArtObject): CollisionResult | null {
     const box1 = { x: obj1.pos.x, y: obj1.pos.y, width: obj1.width, height: obj1.height };
     const box2 = { x: obj2.pos.x, y: obj2.pos.y, width: obj2.width, height: obj2.height };
 

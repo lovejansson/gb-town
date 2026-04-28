@@ -22,6 +22,7 @@ import type { Tilemap } from "./types";
   });
 
   await art.init();
+  
   art.play();
 
 })();
