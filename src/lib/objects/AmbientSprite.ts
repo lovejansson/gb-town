@@ -15,7 +15,7 @@ export default class AmbientSprite extends Sprite {
     spritesheet: string,
     animation: string,
   ) {
-    super(scene, pos, width, height, "e");
+    super(scene, pos, width, height);
     this.spritesheet = spritesheet;
     this.animation = animation;
     this.started = false;

@@ -73,6 +73,9 @@ export default abstract class Scene {
     if (this.renderMode === RenderMode.PIXI) {
       this.attachPixiChild(obj);
     }
+
+    // Call init after object is attached to scene
+    obj.init?.();
   }
 
   removeObject(obj: ArtObject): void {
@@ -147,9 +150,10 @@ export default abstract class Scene {
       return;
     }
 
-    if (obj instanceof ShaderObject) {
-      const pixieChild = obj.getPixiContainer();
-
+    if (obj instanceof ShaderObject || obj.getPixiContainer !== undefined) {
+      const pixieChild = obj.getPixiContainer!();
+      pixieChild.position.set(obj.pos.x, obj.pos.y);
+      pixieChild.visible = obj.isVisible;
       pixieChild.zIndex = this.objects.length - 1;
       this.pixiObjects.set(obj.id, [pixieChild]);
       this.addPixiChild(pixieChild);
@@ -185,8 +189,9 @@ export default abstract class Scene {
       return;
     }
 
-    if (obj instanceof ShaderObject) {
+    if (obj instanceof ShaderObject || obj.getPixiContainer !== undefined) {
       pixiObjects[0].position.set(obj.pos.x, obj.pos.y);
+      pixiObjects[0].visible = obj.isVisible;
     }
   }
 
@@ -197,6 +202,17 @@ export default abstract class Scene {
       for (const v of visuals) {
         v.zIndex = i;
       }
+    }
+  }
+
+  setObjectVisibility(objId: number, visible: boolean): void {
+    const visuals = this.pixiObjects.get(objId);
+    if (!visuals) {
+      console.warn(`No visuals found for object ${objId}`);
+      return;
+    }
+    for (const v of visuals) {
+      v.visible = visible;
     }
   }
 

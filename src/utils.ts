@@ -1,4 +1,4 @@
-import type { Cell, Vec2 } from "./lib/types";
+import type { Cell, Direction, Vec2 } from "./lib/types";
 
 export function isSamePos(pos1: Vec2, pos2: Vec2) {
   return pos1.x === pos2.x && pos1.y === pos2.y;
@@ -59,6 +59,27 @@ export function randomBool() {
   return Math.random() > 0.5;
 }
 
+export function getOppositeDirection(direction: Direction): Direction {
+  switch (direction) {
+    case "n":
+      return "s";
+    case "ne":
+      return "sw";
+    case "e":
+      return "w";
+    case "se":
+      return "nw";
+    case "s":
+      return "n";
+    case "sw":
+      return "ne";
+    case "w":
+      return "e";
+    case "nw":
+      return "se";
+  }
+}
+
 export function manhattan(a: Cell, b: Cell): number {
   return Math.abs(b.row - a.row) + Math.abs(b.col - a.col);
 }
@@ -66,4 +87,40 @@ export function manhattan(a: Cell, b: Cell): number {
 
 export function isInRect(pos: Vec2, rect: {x: number, y: number, w: number, h: number}) {
     return pos.x >= rect.x && pos.x <= rect.x + rect.w && pos.y >= rect.y && pos.y <= rect.y + rect.h;
+}
+
+export function getGoalPositionWithDirectionAwareRounding(
+  currentPos: Vec2,
+  goalPos: Vec2,
+  tileSize: number,
+): Vec2 {
+  const dirX = goalPos.x - currentPos.x;
+  const dirY = goalPos.y - currentPos.y;
+
+  let col = goalPos.x / tileSize;
+  let row = goalPos.y / tileSize;
+
+  // Round based on approach direction
+  col = dirX > 0 ? Math.floor(col) : dirX < 0 ? Math.ceil(col) : Math.round(col);
+  row = dirY > 0 ? Math.floor(row) : dirY < 0 ? Math.ceil(row) : Math.round(row);
+
+  return { x: col * tileSize, y: row * tileSize };
+}
+
+export function getStartPositionWithDirectionAwareRounding(
+  currentPos: Vec2,
+  goalPos: Vec2,
+  tileSize: number,
+): Vec2 {
+  const dirX = goalPos.x - currentPos.x;
+  const dirY = goalPos.y - currentPos.y;
+
+  let col = currentPos.x / tileSize;
+  let row = currentPos.y / tileSize;
+
+  // Round based on approach direction
+  col = dirX > 0 ? Math.ceil(col) : dirX < 0 ? Math.floor(col) : Math.round(col);
+  row = dirY > 0 ? Math.ceil(row) : dirY < 0 ? Math.floor(row) : Math.round(row);
+
+  return { x: col * tileSize, y: row * tileSize };
 }

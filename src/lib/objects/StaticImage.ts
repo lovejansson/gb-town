@@ -15,4 +15,5 @@ export default class StaticImage extends ArtObject {
     super(scene, pos, width, height);
     this.image = image;
   }
+
 }

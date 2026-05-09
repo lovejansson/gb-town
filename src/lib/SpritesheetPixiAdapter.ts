@@ -57,22 +57,26 @@ export default class SpritesheetPixiAdapter implements SpritesheetAdapter<
 
   private convertAsepriteToPixie(spritesheet: AsepriteJSON): PixiJSON {
     const frames: { [k: string]: PixiFrame } = {};
-    for (const [k, v] of Object.entries(spritesheet.frames)) {
-      frames[k] = {
-        frame: v.frame,
-        spriteSourceSize: v.spriteSourceSize,
-        sourceSize: v.sourceSize,
+    for (let i = 0; i < spritesheet.frames.length; ++i) {
+      const f = spritesheet.frames[i];
+
+      frames[i] = {
+        frame: f.frame,
+        spriteSourceSize: f.spriteSourceSize,
+        sourceSize: f.sourceSize,
         anchor: { x: 0, y: 0 },
-        duration: v.duration,
+        duration: f.duration,
       };
     }
 
     const animations: { [k: string]: string[] } = {};
 
     for (const tag of spritesheet.meta.frameTags) {
+
       const animationFrames: string[] = [];
+
       for (let i = tag.from; i <= tag.to; ++i) {
-        animationFrames.push(`${tag.name}-${i - tag.from}`);
+        animationFrames.push(i.toString());
       }
       animations[tag.name] = animationFrames;
     }

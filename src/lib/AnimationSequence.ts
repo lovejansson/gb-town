@@ -17,7 +17,7 @@ type TransitionCondition<T extends TransitionType> =
 export type SequenceAnimationT<T extends TransitionType> = {
   type: T;
   anim: string;
-  options?: AnimationOptions,
+  options?: AnimationOptions;
   transition: TransitionCondition<T>;
 };
 
@@ -97,12 +97,10 @@ export default class AnimationSequence {
 
     switch (playingAnim.type) {
       case TransitionType.Distance: {
-        
         const targetDx = playingAnim.anim.transition.dx;
         const targetDy = playingAnim.anim.transition.dy;
         const spriteDx = this.sprite.pos.x - playingAnim.x;
         const spriteDy = this.sprite.pos.y - playingAnim.y;
-
         const hasReached =
           (targetDx === 0 ||
             (Math.sign(targetDx) === Math.sign(spriteDx) &&
@@ -112,6 +110,14 @@ export default class AnimationSequence {
               Math.abs(spriteDy) >= Math.abs(targetDy)));
 
         if (hasReached) {
+          // Snap to correct delta for sprite
+          if (targetDx !== spriteDx) {
+            this.sprite.pos.x += targetDx - spriteDx;
+          }
+
+          if (targetDy !== spriteDy) {
+            this.sprite.pos.y += targetDy - spriteDy;
+          }
 
           this.currIdx++;
 

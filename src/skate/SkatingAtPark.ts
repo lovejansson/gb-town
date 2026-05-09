@@ -21,24 +21,25 @@ import type { Direction, Vec2 } from "../lib";
 
 import { getBoardCarryOverlay, getBoardFlipOverlay } from "../Human";
 import type Bench from "./Bench";
+import { createAction, type ActionTag, type Updatable } from "../actions";
 
-export default class SkatingAtPark implements Updatable {
+export default class SkatingAtPark implements SkateUpdatable {
   static tag: "skating-at-park" = "skating-at-park";
   readonly tag: "skating-at-park" = SkatingAtPark.tag;
 
   private skater: Skater;
   private tricks: Trick[];
   private obstacles: ObstacleType[];
-  private currAction: Updatable | null;
+  private currAction: SkateUpdatable | null;
   private obstacle: Obstacle | null;
   private bench: Bench | null;
   private tileSize: number;
 
   private transitionToAction(
-    nextAction: Updatable,
+    nextAction: SkateUpdatable,
     actionNode: {
-      parentAction: SubActionTag;
-      currentAction: SubActionTag;
+      parentAction: ActionTag;
+      currentAction: ActionTag;
       targetId: number | null;
       reason: string | null;
     },
@@ -50,6 +51,7 @@ export default class SkatingAtPark implements Updatable {
 
     this.currAction = nextAction;
     this.skater.utility.pushAction(actionNode);
+    this.currAction.init();
   }
 
   constructor(skater: Skater) {
@@ -64,6 +66,8 @@ export default class SkatingAtPark implements Updatable {
     this.obstacle = null;
     this.bench = null;
   }
+
+  init() {}
 
   update(dt: number): void {
     if (this.currAction === null) {
@@ -283,7 +287,7 @@ export default class SkatingAtPark implements Updatable {
   }
 }
 
-class FlatObstacle implements Updatable {
+class FlatObstacle implements SkateUpdatable {
   static tag: "flat" = "flat";
   readonly tag: "flat" = FlatObstacle.tag;
   private skater: Skater;
@@ -303,6 +307,8 @@ class FlatObstacle implements Updatable {
 
     this.animationSeq.start();
   }
+
+  init() {}
 
   update(dt: number) {
     this.animationSeq.update(dt);
@@ -351,7 +357,7 @@ class FlatObstacle implements Updatable {
  * Skater has already arrived at the correct position at the ramp obstacle here, so this
  * class simply moves the skater up the ramp!
  */
-class ClimbRamp implements Updatable {
+class ClimbRamp implements SkateUpdatable {
   static tag: "climb-ramp" = "climb-ramp";
   readonly tag: "climb-ramp" = ClimbRamp.tag;
 
@@ -430,6 +436,8 @@ class ClimbRamp implements Updatable {
     this.animationSequence.start();
   }
 
+  init() {}
+
   update(dt: number): void {
     if (this.animationSequence.isFinished) {
       this.skater.direction = (() => {
@@ -461,21 +469,21 @@ class ClimbRamp implements Updatable {
   }
 }
 
-export class RampObstacle implements Updatable {
+export class RampObstacle implements SkateUpdatable {
   static tag: "ramp" = "ramp";
   readonly tag: "ramp" = RampObstacle.tag;
   private skater: Skater;
   private timer: Timer;
-  private currAction: null | Updatable;
+  private currAction: null | SkateUpdatable;
   private obstacle: Ramp;
   private start: { pos: Vec2; rampSide: RampSide };
   private end: { pos: Vec2; rampSide: RampSide };
 
   private transitionToAction(
-    nextAction: Updatable,
+    nextAction: SkateUpdatable,
     actionNode: {
-      parentAction: SubActionTag;
-      currentAction: SubActionTag;
+      parentAction: ActionTag;
+      currentAction: ActionTag;
       targetId: number | null;
       reason: string | null;
     },
@@ -486,6 +494,7 @@ export class RampObstacle implements Updatable {
 
     this.currAction = nextAction;
     this.skater.utility.pushAction(actionNode);
+    this.currAction.init();
   }
 
   constructor(skater: Skater, obstacle: Ramp, ms: number) {
@@ -502,6 +511,8 @@ export class RampObstacle implements Updatable {
     this.start = { pos: idlePos, rampSide };
     this.end = { pos: idlePos, rampSide };
   }
+
+  init() {}
 
   update(dt: number): void {
     if (this.currAction === null) {
@@ -644,7 +655,7 @@ export class RampObstacle implements Updatable {
   }
 }
 
-class RampTricks implements Updatable {
+class RampTricks implements SkateUpdatable {
   static TAG: "ramp-tricks" = "ramp-tricks";
   readonly tag: "ramp-tricks" = RampTricks.TAG;
 
@@ -795,6 +806,8 @@ class RampTricks implements Updatable {
     this.animationSequence.start();
   }
 
+  init() {}
+
   update(dt: number): void {
     this.animationSequence.update(dt);
     if (this.animationSequence.getCurrentAnimation().name === "walk-board-n") {
@@ -873,7 +886,7 @@ class RampTricks implements Updatable {
   }
 }
 
-class CruiseTo implements Updatable {
+class CruiseTo implements SkateUpdatable {
   static TAG: "cruise-to" = "cruise-to";
   readonly tag: "cruise-to" = CruiseTo.TAG;
 
@@ -884,9 +897,8 @@ class CruiseTo implements Updatable {
   constructor(skater: Skater, to: Vec2) {
     this.skater = skater;
 
-    console.log(to);
-
-    this.path = new Path(this.skater, to, (this.skater.scene as Play).parkGrid);
+    
+    this.path = new Path(this.skater, to, (this.skater.scene as Play).grid);
     if (this.skater.direction === "e") {
       this.skater.animations.play(`cruise-b-${this.skater.direction}`);
     } else if (this.skater.direction === "w") {
@@ -895,8 +907,12 @@ class CruiseTo implements Updatable {
       this.skater.animations.play(`cruise-${this.skater.direction}`);
     }
 
+
+  
     this.animSeq = null;
   }
+
+  init() {}
 
   update(dt: number): void {
     if (this.path.hasReachedGoal) {
@@ -958,7 +974,7 @@ class CruiseTo implements Updatable {
   }
 }
 
-class WaitingMyTurn implements Updatable {
+class WaitingMyTurn implements SkateUpdatable {
   static TAG: "waiting-my-turn" = "waiting-my-turn";
   readonly tag: "waiting-my-turn" = WaitingMyTurn.TAG;
   private skater: Skater;
@@ -973,9 +989,11 @@ class WaitingMyTurn implements Updatable {
     this.timer.start(1000 * 3);
     if (this.obstacle.isStartOnGround()) {
       const skaterCell = this.skater.getGridCell();
-      (this.skater.scene as Play).parkGrid[skaterCell.row][skaterCell.col] = 1;
+      (this.skater.scene as Play).grid[skaterCell.row][skaterCell.col] = 1;
     }
   }
+
+  init() {}
 
   update(_: number): void {
     if (
@@ -989,7 +1007,7 @@ class WaitingMyTurn implements Updatable {
     if (this.obstacle.isMyTurn(this.skater.id)) {
       if (this.obstacle.isStartOnGround()) {
         const skaterCell = this.skater.getGridCell();
-        (this.skater.scene as Play).parkGrid[skaterCell.row][skaterCell.col] =
+        (this.skater.scene as Play).grid[skaterCell.row][skaterCell.col] =
           0;
       }
 
@@ -1002,7 +1020,7 @@ class WaitingMyTurn implements Updatable {
   }
 }
 
-class SittingBench implements Updatable {
+class SittingBench implements SkateUpdatable {
   static TAG: "bench" = "bench";
   readonly tag: "bench" = SittingBench.TAG;
   private skater: Skater;
@@ -1017,8 +1035,10 @@ class SittingBench implements Updatable {
     this.timer.start(duration);
 
     const skaterCell = this.skater.getGridCell();
-    (this.skater.scene as Play).parkGrid[skaterCell.row][skaterCell.col] = 1;
+    (this.skater.scene as Play).grid[skaterCell.row][skaterCell.col] = 1;
   }
+
+  init() {}
 
   update(_: number): void {
     if (!this.skater.animations.isPlaying("idle-sit-s")) {
@@ -1043,62 +1063,32 @@ class SittingBench implements Updatable {
   }
 }
 
-export type SubActionTag =
-  | "skating-at-park"
-  | "bench"
-  | "cruise-to"
-  | "climb-ramp"
-  | "waiting-my-turn"
-  | "ramp-tricks"
-  | ObstacleType;
 
-type ActionParams = {
-  "skating-at-park": [skater: Skater];
-  "cruise-to": [skater: Skater, to: Vec2];
-  bench: [skater: Skater, bench: Bench, duration: number];
+export interface SkateUpdatable extends Updatable {
+  readonly tag: SkatingAtParkActionTag;
+}
 
-  "climb-ramp": [
-    skater: Skater,
-    obstacle: Ramp,
-    rampSide: RampSide,
-    climbUp: boolean,
-  ];
-  "ramp-tricks": [
-    skater: Skater,
-    obstacle: Obstacle,
-    start: { pos: Vec2; rampSide: RampSide },
-    end: { pos: Vec2; rampSide: RampSide },
-  ];
-  "waiting-my-turn": [skater: Skater, obstacle: Obstacle];
-  flat: [skater: Skater, obstacle: Obstacle, ms: number];
-  ramp: [skater: Skater, obstacle: Ramp, ms: number];
+
+const spec = {
+  "skating-at-park": { ctor: SkatingAtPark },
+  "cruise-to":       { ctor: CruiseTo },
+  bench:             { ctor: SittingBench },
+  "climb-ramp":      { ctor: ClimbRamp },
+  "ramp-tricks":     { ctor: RampTricks },
+  "waiting-my-turn": { ctor: WaitingMyTurn },
+  flat:              { ctor: FlatObstacle },
+  ramp:              { ctor: RampObstacle },
+} as const;
+
+export type SkateActionSpec = {
+  [K in keyof typeof spec]: {
+    args: ConstructorParameters<typeof spec[K]["ctor"]>;
+    result: InstanceType<typeof spec[K]["ctor"]>;
+  };
 };
 
-const ActionConstructors: { [T in SubActionTag]: UpdatableConstructor<T> } = {
-  "skating-at-park": SkatingAtPark,
-  bench: SittingBench,
-  "cruise-to": CruiseTo,
-  "waiting-my-turn": WaitingMyTurn,
-  "climb-ramp": ClimbRamp,
-  "ramp-tricks": RampTricks,
-  flat: FlatObstacle,
-  ramp: RampObstacle,
-};
+export type SkatingAtParkActionTag = keyof SkateActionSpec;
 
-interface UpdatableConstructor<T extends SubActionTag> {
-  new (...args: ActionParams[T]): Updatable;
-}
-
-export interface Updatable {
-  readonly tag: SubActionTag;
-  update(dt: number): void;
-  isComplete(): boolean;
-}
-
-function createAction<T extends SubActionTag>(
-  tag: T,
-  ...args: ActionParams[T]
-): Updatable {
-  const ctor = ActionConstructors[tag];
-  return new ctor(...args);
-}
+export const ActionConstructors = Object.fromEntries(
+  Object.entries(spec).map(([k, v]) => [k, v.ctor])
+) as { [K in SkatingAtParkActionTag]: typeof spec[K]["ctor"] };

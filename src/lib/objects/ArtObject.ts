@@ -10,7 +10,7 @@ export default abstract class ArtObject {
   height: number;
   halfWidth: number;
   halfHeight: number;
- 
+  isVisible: boolean;
 
   constructor(scene: Scene, pos: Vec2, width: number, height: number) {
     this.scene = scene;
@@ -19,6 +19,7 @@ export default abstract class ArtObject {
     this.height = height;
     this.halfWidth = width / 2;
     this.halfHeight = height / 2;
+    this.isVisible = true;
     if (scene.art === null)
       throw new Error("art instance is not set on scene object");
 
@@ -27,5 +28,12 @@ export default abstract class ArtObject {
 
   update(_dt: number): void {}
 
+  init?(): void;
+
   getPixiContainer?(): ContainerChild;
+
+  setVisible(visible: boolean): void {
+    this.isVisible = visible;
+    this.scene.setObjectVisibility(this.id, visible);
+  }
 }

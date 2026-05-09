@@ -16,6 +16,7 @@ export default class TexturesManager {
    * @param path The URL or path to the texture file.
    */
   add(name: string, path: string): void {
+
     this.paths.set(name, path);
   }
 
@@ -57,6 +58,7 @@ export default class TexturesManager {
    * @throws TextureNotLoadedError if the texture has not been loaded yet.
    */
   get(name: string): Texture {
+    
     const tex = this.textures.get(name);
     if (!tex) throw new TextureNotLoadedError(name);
     return tex;

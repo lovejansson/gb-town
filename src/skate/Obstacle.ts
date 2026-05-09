@@ -39,6 +39,7 @@ export const obstacleTricks: { [k in ObstacleType]: Trick[] } = {
 };
 
 export default class Obstacle extends StaticImage {
+
   readonly type: ObstacleType;
   private queue: number[];
   private isFree: boolean;
@@ -158,6 +159,7 @@ export default class Obstacle extends StaticImage {
 export const BEHIND_RAMP_OFFSET = 3;
 
 export class Ramp extends Obstacle {
+  
   private idlePositions: {
     pos: Vec2;
     isFree: boolean;
@@ -305,15 +307,18 @@ export enum RampSide {
 }
 
 export class Flat extends Obstacle {
+
   constructor(scene: Scene, pos: Vec2, width: number, height: number) {
     super(scene, "flat", pos, width, height, "flat", 4);
   }
 
   getArrivePos(_: Vec2): Vec2 {
-    const cell = getRandomFreeCell((this.scene as Play).parkGrid);
+
+    const cell = getRandomFreeCell((this.scene as Play).grid);
 
     if (cell === null) throw new Error("No free cell found!");
 
     return cellToPos(cell, this.tileSize);
+
   }
 }

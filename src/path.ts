@@ -1,7 +1,7 @@
 import { createPathAStar } from "./grid.ts";
-import type { Sprite } from "./lib/index.ts";
+import type Human from "./Human.ts";
 import type { Cell, Direction, Vec2 } from "./lib/types.ts";
-import { getPosDiff, posToCell } from "./utils.ts";
+import { cellToPos, getPosDiff, posToCell } from "./utils.ts";
 
 // Get direction diff for x and why and use that as index to get label for direction. directionLables[y + 1][x + 1]
 const directionLables = [
@@ -19,13 +19,13 @@ export class Path {
   hasReachedGoal: boolean;
   cellCount: number;
 
-  private currStart: Vec2;
+  private currCellStart: Vec2;
   private path: Cell[];
   private currPathIdx;
-  private goalCell;
-  private sprite: Sprite;
+  private goalCell: Cell;
+  private sprite: Human;
 
-  constructor(sprite: Sprite, goal: Vec2, grid: (0 | 1)[][]) {
+  constructor(sprite: Human, goal: Vec2, grid: (0 | 1)[][]) {
     this.sprite = sprite;
     this.goalCell = posToCell(goal, sprite.scene.art!.tileSize);
 
@@ -35,35 +35,51 @@ export class Path {
       grid,
     );
 
-    this.currStart = { ...this.sprite.pos };
+    this.currCellStart = { ...this.sprite.pos };
     this.currPathIdx = 0;
-    this.hasReachedGoal = false;
+    this.hasReachedGoal = this.path.length <= 1;
     this.cellCount = 0;
   }
 
   update(_: number) {
-
     if (!this.hasReachedGoal) {
       this.updateVelocity();
       this.updateDirection();
 
-      // When sprite has moved a tile changed to next cell
+      const diff = getPosDiff(this.sprite.pos, this.currCellStart);
+      const tileSize = this.sprite.scene.art!.tileSize;
 
-      const diff = getPosDiff(this.sprite.pos, this.currStart);
-      const pixelDiff = Math.max(Math.abs(diff.x), Math.abs(diff.y));
+      const hasReachedStepX =
+        this.sprite.vel.x === 0 ||
+        Math.sign(diff.x) === Math.sign(this.sprite.vel.x) &&
+          Math.abs(diff.x) >= tileSize;
+      const hasReachedStepY =
+        this.sprite.vel.y === 0 ||
+        Math.sign(diff.y) === Math.sign(this.sprite.vel.y) &&
+          Math.abs(diff.y) >= tileSize;
 
-   
-      if (pixelDiff === this.sprite.scene.art!.tileSize) {
+      if (hasReachedStepX && hasReachedStepY) {
+        this.snapToNextCell();
         this.next();
       }
     }
+  }
+
+  private snapToNextCell() {
+    if (this.currPathIdx + 1 >= this.path.length) return;
+
+    const nextCell = this.path[this.currPathIdx + 1];
+    const nextPos = cellToPos(nextCell, this.sprite.scene.art!.tileSize);
+
+    this.sprite.pos.x = nextPos.x;
+    this.sprite.pos.y = nextPos.y;
   }
 
   private next() {
     this.currPathIdx++;
     this.cellCount++;
 
-    this.currStart = { ...this.sprite.pos };
+    this.currCellStart = { ...this.sprite.pos };
 
     if (this.currPathIdx === this.path.length - 1) {
       this.hasReachedGoal = true;
@@ -87,8 +103,7 @@ export class Path {
   }
 
   private updateDirection(): void {
-  
-    this.sprite.direction = directionLables[this.sprite.vel.y + 1][
+    (this.sprite).direction = directionLables[this.sprite.vel.y + 1][
       this.sprite.vel.x + 1
     ] as Direction;
   }

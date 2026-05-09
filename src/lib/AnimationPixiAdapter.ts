@@ -1,4 +1,4 @@
-import { type FrameObject, AnimatedSprite, Spritesheet } from "pixi.js";
+import { type FrameObject, AnimatedSprite, Spritesheet, type Ticker } from "pixi.js";
 import type Sprite from "./objects/Sprite.ts";
 import type {
   AnimationOptions,
@@ -15,6 +15,8 @@ export default class AnimationPixiAdapter {
   private animatedSpriteOverlay: AnimatedSprite | null;
   private animations: Map<string, FrameObject[]>;
   private defaults: Map<string, { repeat: boolean | number }>;
+  private activeOverlayDx: number;
+  private activeOverlayDy: number;
 
   currentAnimation: string | null = null;
   loopCount: number = 0;
@@ -28,17 +30,27 @@ export default class AnimationPixiAdapter {
     this.animatedSpriteOverlay = null;
     this.animations = new Map();
     this.defaults = new Map();
+    this.activeOverlayDx = 0;
+    this.activeOverlayDy = 0;
   }
 
   attachPixiSprites(main: AnimatedSprite, overlay: AnimatedSprite): void {
     this.animatedSprite = main;
     this.animatedSpriteOverlay = overlay;
+
+    // We step animations from the game loop to keep callback order deterministic.
+    this.animatedSprite.autoUpdate = false;
+    this.animatedSpriteOverlay.autoUpdate = false;
   }
+
+
 
   registerSpritesheet(key: string, options?: AnimationOptionsDefaults): void {
     const spritesheet = this.sprite.scene.art!.spritesheets.get(
       key,
     ) as Spritesheet<PixiJSON>;
+
+
 
     for (const [name, textures] of Object.entries(spritesheet.animations)) {
       this.animations.set(
@@ -76,24 +88,33 @@ export default class AnimationPixiAdapter {
     const anim = this.animations.get(name);
     if (!anim) throw new AnimationNotAddedError(name);
 
-    const animOverlay =
-      options?.overlay !== undefined
-        ? this.animations.get(options.overlay.name)
-        : undefined;
+    let animOverlay = undefined;
+
+    if(options?.overlay) {
+      animOverlay =  this.animations.get(options.overlay.name);
+      if(animOverlay === undefined) throw new Error("Overlay animation not registered!");  
+    }
 
     const repeat = options?.repeat ?? this.defaults.get(name)?.repeat ?? false;
+    const reverse = options?.reverse ?? false;
+    this.activeOverlayDx = options?.overlay?.dx ?? 0;
+    this.activeOverlayDy = options?.overlay?.dy ?? 0;
 
     this.currentAnimation = name;
     this.loopCount = 0;
 
-    this.animatedSprite.textures = anim;
+    this.animatedSprite.textures = reverse ? anim.toReversed() : anim;
     this.animatedSprite.loop = repeat === true;
     this.animatedSprite.visible = true;
+    this.syncSpritePositions();
     this.animatedSprite.play();
 
     if (animOverlay !== undefined) {
-      this.animatedSpriteOverlay.textures = animOverlay;
+      this.animatedSpriteOverlay.textures = reverse
+        ? animOverlay.toReversed()
+        : animOverlay;
       this.animatedSpriteOverlay.visible = true;
+      this.syncSpritePositions();
       this.animatedSpriteOverlay.gotoAndStop(0);
     } else {
       this.animatedSpriteOverlay.visible = false;
@@ -163,13 +184,14 @@ export default class AnimationPixiAdapter {
         );
       }
 
-      this.animatedSprite.position.set(this.sprite.pos.x, this.sprite.pos.y + this.sprite.drawOffset.y);
+      this.syncSpritePositions();
 
       if (this.animatedSpriteOverlay !== null) {
-        this.animatedSpriteOverlay.position.set(
-          this.sprite.pos.x + (options?.overlay?.dx ?? 0),
-          this.sprite.pos.y + (options?.overlay?.dy ?? 0) + this.sprite.drawOffset.y,
-        );
+        if (options?.overlay?.drawBehind) {
+          this.animatedSpriteOverlay.zIndex = this.animatedSprite.zIndex - 1;
+        } else if (options?.overlay?.drawOnTop) {
+          this.animatedSpriteOverlay.zIndex = this.animatedSprite.zIndex + 1;
+        }
 
         if (this.animatedSpriteOverlay.visible) {
           const mainTotal = Math.max(this.animatedSprite.totalFrames, 1);
@@ -197,8 +219,45 @@ export default class AnimationPixiAdapter {
     }
   }
 
-  // Not needed since pixi handles animation update internally
-  update(_dt: number): void {}
+  update(dt: number | Ticker): void {
+    if (this.animatedSprite === null) {
+      return;
+    }
+
+    this.syncSpritePositions();
+
+    if (this.currentAnimation === null) {
+      return;
+    }
+
+    if (typeof dt === "number") {
+      return;
+    }
+
+    this.animatedSprite.update(dt);
+    if(this.animatedSpriteOverlay) {
+      this.animatedSpriteOverlay.update(dt);
+    }
+  }
+
+  private syncSpritePositions(): void {
+    if (this.animatedSprite === null) {
+      return;
+    }
+
+    this.animatedSprite.position.set(
+      this.sprite.pos.x,
+      this.sprite.pos.y + this.sprite.drawOffset.y,
+    );
+
+    if (this.animatedSpriteOverlay !== null) {
+      this.animatedSpriteOverlay.position.set(
+        this.sprite.pos.x + this.activeOverlayDx,
+        this.sprite.pos.y + this.activeOverlayDy + this.sprite.drawOffset.y,
+      );
+    }
+  }
+
   draw(_ctx: CanvasRenderingContext2D): void {}
 
   isLastFrame(): boolean {

@@ -1,7 +1,8 @@
-import { Application } from "pixi.js";
+import { Application, type Ticker } from "pixi.js";
 import type Art from "./Art.ts";
 import type { ArtConfig } from "./Art.ts";
 import { RenderMode } from "./Art.ts";
+import Sprite from "./objects/Sprite.ts";
 import type Scene from "./Scene.ts";
 import { scaleToSize, RendererUnInitialized, type RendererAdapter } from "./Renderer.ts";
 
@@ -68,16 +69,28 @@ export class PixiRenderer implements RendererAdapter {
     this.syncPixieSceneVisibility();
 
     this.app.ticker.add((time) => {
+
       if (this.art.isPlaying) {
         this.playScene.update(time.deltaMS);
+        this.updateSceneAnimations(this.playScene, time);
 
         if (this.art.displayGrid) {
           // TODO: draw pixie grid
         }
       } else {
         this.pauseScene.update(time.deltaMS);
+        this.updateSceneAnimations(this.pauseScene, time);
       }
     });
+
+  }
+
+  private updateSceneAnimations(scene: Scene, ticker: Ticker): void {
+    for (const obj of scene.objects) {
+      if (obj instanceof Sprite) {
+        obj.animations.update(ticker);
+      }
+    }
   }
 
   private syncPixieSceneVisibility(): void {

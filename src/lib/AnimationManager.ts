@@ -1,4 +1,4 @@
-import type { AnimatedSprite } from "pixi.js";
+import type { AnimatedSprite, Ticker } from "pixi.js";
 import type Sprite from "./objects/Sprite.ts";
 import AnimationCanvasAdapter from "./AnimationCanvasAdapter.ts";
 import type AnimationPixiAdapter from "./AnimationPixiAdapter.ts";
@@ -14,6 +14,7 @@ export async function preloadPixiAnimationAdapter(): Promise<void> {
 export type AnimationOptions = {
   repeat?: number | boolean; // true = loop forever, number = fixed repeat count, false = play once
   overlay?: OverlayOptions;
+  reverse?: boolean;
 };
 
 export type OverlayOptions = {
@@ -96,7 +97,7 @@ export default class AnimationManager {
     return this.adapter.getFrameCount(name);
   }
 
-  update(dt: number): void {
+  update(dt: number | Ticker): void {
     this.adapter.update(dt);
   }
 

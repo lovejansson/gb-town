@@ -1,4 +1,5 @@
 import type Sprite from "./objects/Sprite.ts";
+import type { Ticker } from "pixi.js";
 import type {
   AnimationOptions,
   AnimationOptionsDefaults,
@@ -72,12 +73,11 @@ export default class AnimationCanvasAdapter {
       const frames: CanvasFrame[] = [];
 
       for (let i = tag.from; i <= tag.to; i++) {
-        const frameKey = `${tag.name}-${i - tag.from}`;
-        const f = sheet.data.frames[frameKey];
+        const f = sheet.data.frames[i];
 
         if (!f) {
           throw new Error(
-            `Missing frame \"${frameKey}\" in spritesheet \"${key}\" for tag \"${tag.name}\".`,
+            `Missing frame \"${i}\" in spritesheet \"${key}\" for tag \"${tag.name}\".`,
           );
         }
 
@@ -100,6 +100,7 @@ export default class AnimationCanvasAdapter {
   }
 
   play(name: string, options?: AnimationOptions): void {
+    // TODO: Imp reverse option here!
     const anim = this.animations.get(name);
     if (!anim) throw new AnimationNotAddedError(name);
 
@@ -136,15 +137,17 @@ export default class AnimationCanvasAdapter {
     }
   }
 
-  update(dt: number): void {
+  update(dt: number | Ticker): void {
     if (this.playing === null) return;
+
+    const dtMs = typeof dt === "number" ? dt : dt.deltaMS;
 
     const anim = this.animations.get(this.playing.animationKey);
     if (!anim) return;
 
     const frame = anim.frames[this.playing.frameIndex];
 
-    this.playing.elapsed += dt;
+    this.playing.elapsed += dtMs;
 
     if (this.playing.elapsed < frame.duration) return;
 

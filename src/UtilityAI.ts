@@ -1,29 +1,47 @@
 import type Human from "./Human";
-import SkatingAtPark, { type SubActionTag } from "./skate/SkatingAtPark";
+import type { ActionTag, Updatable } from "./actions";
+import RideFerrisWheel from "./ferris/RideFerrisWheel";
+import EatAtRestaurant, { WorkAtRestaurant } from "./restaurant/EatAtRestaurant";
+import SkatingAtPark from "./skate/SkatingAtPark";
 
 /**
  * Utility AI for deciding the top-level actions a character can take in the world.
  */
 export default class UtilityAI {
   private sprite: Human;
-  private actions: ActionTag[];
-  private currAction: Updatable;
+  private actions: MainActionTag[];
+  private currAction: MainActionUpdatable | null;
   private chain: ActionNode[];
 
-  constructor(sprite: Human, actions: ActionTag[], initAction: ActionTag) {
+  constructor(sprite: Human, actions: MainActionTag[]) {
     this.sprite = sprite;
     this.actions = actions;
-    const ctor = ActionConstructors[initAction];
+    this.chain = [];
+    this.currAction = null;
+  }
+
+  init(initAction: MainActionTag): void {
+    if (!this.actions.includes(initAction))
+      throw new Error(
+        "Initial action is not registered as an action for human!",
+      );
+
+    const ctor = MainActionConstructors[initAction];
     this.currAction = new ctor(this.sprite);
-    this.chain = [{
-      parentAction: initAction,
-      currentAction: initAction,
-      targetId: null,
-      reason: `selected top-level initial action ${initAction}`,
-    }];
+    this.chain = [
+      {
+        parentAction: initAction,
+        currentAction: initAction,
+        targetId: null,
+        reason: `selected top-level initial action ${initAction}`,
+      },
+    ];
+
+    this.currAction.init();
   }
 
   update(dt: number): void {
+    if (this.currAction === null) throw new Error("UtilityAI uninitialized");
     this.currAction.update(dt);
 
     if (this.currAction.isComplete()) {
@@ -32,13 +50,13 @@ export default class UtilityAI {
     }
   }
 
-  registerAction(action: ActionTag) {
+  registerAction(action: MainActionTag) {
     if (this.actions.includes(action))
       throw new Error("Action already registered.");
     this.popAction();
   }
 
-  unregisterAction(action: ActionTag): void {
+  unregisterAction(action: MainActionTag): void {
     const idx = this.actions.findIndex((a) => a === action);
 
     if (idx === -1) throw new Error("Action not registered.");
@@ -61,12 +79,12 @@ export default class UtilityAI {
 
   private newAction() {
     let max = 0;
-    let action: ActionTag = "skating-at-park";
+    let action: MainActionTag = "skating-at-park";
 
     for (const a of this.actions) {
       const scoreFn = ActionScoreFunctions[a];
 
-      const score = scoreFn(this.sprite, { time: 0 });
+      const score = scoreFn(this.sprite);
 
       if (score > max) {
         max = score;
@@ -74,7 +92,8 @@ export default class UtilityAI {
       }
     }
 
-    const ctor = ActionConstructors[action];
+    const ctor = MainActionConstructors[action];
+
     this.currAction = new ctor(this.sprite);
     this.pushAction({
       parentAction: action,
@@ -86,46 +105,62 @@ export default class UtilityAI {
 }
 
 type ActionNode = {
-  parentAction: ActionTag | SubActionTag;
-  currentAction: ActionTag | SubActionTag;
+  parentAction: ActionTag;
+  currentAction: ActionTag;
   targetId: number | null;
   reason: string | null;
 };
 
-export type ActionTag = "skating-at-park" | "beach";
+interface MainActionUpdatable extends Updatable {
+  readonly tag: MainActionTag;
+}
+export type MainActionTag =
+  | "skating-at-park"
+  | "eat-restaurant"
+  | "work-restaurant"
+  | "ride-ferris-wheel";
 
-const ActionConstructors: { [T in ActionTag]: UpdatableConstructor } = {
-  "skating-at-park": SkatingAtPark,
-  beach: SkatingAtPark,
+const mainSpec = {
+  "skating-at-park": { ctor: SkatingAtPark },
+  "eat-restaurant": { ctor: EatAtRestaurant },
+  "work-restaurant": { ctor: WorkAtRestaurant },
+  "ride-ferris-wheel": { ctor: RideFerrisWheel },
+} as const;
+
+export type MainActionSpec = {
+  [K in keyof typeof mainSpec]: {
+    args: ConstructorParameters<(typeof mainSpec)[K]["ctor"]>;
+    result: InstanceType<(typeof mainSpec)[K]["ctor"]>;
+  };
 };
 
-interface UpdatableConstructor {
-  new (human: Human): Updatable;
-}
+export const MainActionConstructors = Object.fromEntries(
+  Object.entries(mainSpec).map(([k, v]) => [k, v.ctor]),
+) as { [K in MainActionTag]: (typeof mainSpec)[K]["ctor"] };
 
-export interface Updatable {
-  readonly tag: ActionTag;
-  update(dt: number): void;
-  isComplete(): boolean;
-}
-
-type WorldState = {
-  time: number;
-};
-
-type ActionScoreFn = (human: Human, worldState: WorldState) => number;
+type ActionScoreFn = (human: Human) => number;
 
 const ActionScoreFunctions: {
-  [T in ActionTag]: ActionScoreFn;
+  [T in MainActionTag]: ActionScoreFn;
 } = {
   "skating-at-park": calcSkateAtParkAction,
-  beach: calcGoToBeachAction,
+  "eat-restaurant": calcGoToRestaurant,
+  "work-restaurant": workRestaurant,
+  "ride-ferris-wheel": calcRideFerrisWheel,
 };
 
-function calcSkateAtParkAction(human: Human, worldState: WorldState): number {
+function calcSkateAtParkAction(_: Human): number {
+  return 0.0;
+}
+
+function workRestaurant(_: Human): number {
   return 1.0;
 }
 
-function calcGoToBeachAction(human: Human, worldState: WorldState): number {
-  return 0.0;
+function calcGoToRestaurant(_: Human): number {
+  return 1.0;
+}
+
+function calcRideFerrisWheel(_: Human): number {
+  return 1.0;
 }

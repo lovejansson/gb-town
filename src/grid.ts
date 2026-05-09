@@ -82,7 +82,7 @@ export function createPathAStar(
   // if (!cellIsWithinBounds(to, grid))
   //   throw new Error("'to' cell is out of bounds");
 
-  // console.log(from, to);
+  console.log(from, to);
 
   const rows = grid.length;
   const cols = grid[0].length;

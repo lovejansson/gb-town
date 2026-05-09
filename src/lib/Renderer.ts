@@ -163,12 +163,15 @@ export class CanvasRenderer implements RendererAdapter {
     if (scene.objects === null) return;
 
     for (const obj of scene.objects) {
-      this.drawCanvasObject(obj);
+      if (obj.isVisible) {
+        this.drawCanvasObject(obj);
+      }
     }
   }
 
   private drawCanvasObject(obj: unknown): void {
     if (this.ctx === null) throw new RendererUnInitialized();
+
     if (obj instanceof StaticImage) {
       const img = this.art.images.get(obj.image);
       if (!img) return;

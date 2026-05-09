@@ -66,6 +66,7 @@ export type Size = {
 };
 
 export type AsepriteFrame = {
+  filename: string;
   frame: Rect;
   rotated: boolean;
   trimmed: boolean;
@@ -102,7 +103,7 @@ export type AsepriteMeta = {
 };
 
 export type AsepriteJSON = {
-  frames: { [key: string]: AsepriteFrame };
+  frames: AsepriteFrame[];
   meta: AsepriteMeta;
 };
 

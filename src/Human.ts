@@ -1,6 +1,7 @@
 import { Scene, Sprite } from "./lib";
+import type { OverlayOptions } from "./lib/AnimationManager";
 import type { Direction, Vec2 } from "./lib/types";
-import UtilityAI from "./UtilityAI";
+import UtilityAI, { type MainActionTag } from "./UtilityAI";
 
 export default class Human extends Sprite {
   static CRUISE_SPEED = 4;
@@ -8,17 +9,16 @@ export default class Human extends Sprite {
   static TRICK_SPEED = 4;
   static WALK_SPEED = 1;
 
-  i: number;
   tileSize: number;
   skill: number;
   utility: UtilityAI;
+  initAction: MainActionTag;
+  direction: Direction;
 
+  constructor(scene: Scene, pos: Vec2, initAction: MainActionTag) {
+    super(scene, pos, 16, 32);
 
-  constructor(scene: Scene, pos: Vec2) {
-
-    super(scene, pos, 16, 32, "s");
-
-    this.utility = new UtilityAI(this, ["skating-at-park", "beach"], "skating-at-park");
+    this.direction = "s";
 
     this.tileSize = scene.art!.tileSize;
 
@@ -31,9 +31,11 @@ export default class Human extends Sprite {
       defaults: REPEAT_DEFAULTS,
     });
 
+    this.animations.registerSpritesheet("foods");
+
     this.tileSize = scene.art!.tileSize;
 
-    this.i = 0;
+    this.initAction = initAction;
 
     this.animations.onFrameChange = (
       name: string,
@@ -45,6 +47,7 @@ export default class Human extends Sprite {
       if (updateType === undefined) return; // overlay or unregistered animation
 
       if (updateType === PositionUpdateType.VEL) {
+        this.updateVelocity();
         this.pos.x += this.vel.x;
         this.pos.y += this.vel.y;
         return;
@@ -63,11 +66,26 @@ export default class Human extends Sprite {
         }
       }
     };
+
+    this.utility = new UtilityAI(this, [
+      "eat-restaurant",
+      "skating-at-park",
+      "work-restaurant",
+      "ride-ferris-wheel",
+    ]);
+  }
+
+  init(): void {
+    this.utility.init(this.initAction);
   }
 
   update(dt: number): void {
     this.utility.update(dt);
-    this.updateVelocity();
+  }
+
+  isSitting(): boolean {
+    const anim = this.animations.getPlaying();
+    return anim !== null && anim.includes("idle-sit");
   }
 
   getCurrentAction() {
@@ -92,7 +110,8 @@ export default class Human extends Sprite {
       } else if (
         animName.includes("idle") ||
         animName.startsWith("flip") ||
-        animName.includes("prep")
+        animName.includes("prep") ||
+        animName.includes("fade")
       ) {
         speed = 0;
       } else if (animName.includes("walk")) {
@@ -180,6 +199,45 @@ export default class Human extends Sprite {
 
     return dist;
   }
+}
+
+export function getFoodOverlay(direction: Direction, food: string): OverlayOptions {
+  switch (direction) {
+    case "n":
+      return {
+        name: food,
+        drawOnTop: false,
+        drawBehind: true,
+        dy: 0,
+        dx: 0,
+      };
+    case "e":
+      return {
+        name: food,
+        drawOnTop: false,
+        drawBehind: true,
+        dy: 3,
+        dx: 6,
+      };
+    case "s":
+      return {
+        name: food,
+        drawOnTop: true,
+        drawBehind: false,
+        dy: 6,
+        dx: 0,
+      };
+    case "w":
+      return {
+        name: food,
+        drawOnTop: false,
+        drawBehind: true,
+        dy: 3,
+        dx: -5,
+      };
+  }
+
+  throw Error("DIRECTION ERROR");
 }
 
 export function getBoardFlipOverlay(direction: Direction) {
@@ -273,12 +331,20 @@ const VEL_ANIMS = [
   "walk-board-s",
   "walk-board-e",
   "walk-board-w",
+  "walk-hold-n",
+  "walk-hold-s",
+  "walk-hold-e",
+  "walk-hold-w",
   "idle-sit-n",
   "idle-sit-s",
   "idle-stand-n",
   "idle-stand-s",
   "idle-stand-w",
   "idle-stand-e",
+  "idle-stand-hold-n",
+  "idle-stand-hold-s",
+  "idle-stand-hold-w",
+  "idle-stand-hold-e",
   "idle-stand-board-n",
   "idle-stand-board-s",
   "prep-n",
@@ -370,6 +436,10 @@ const REPEAT_DEFAULTS: Record<string, { repeat: number | boolean }> = {
   "walk-s": { repeat: true },
   "walk-e": { repeat: true },
   "walk-w": { repeat: true },
+  "walk-hold-n": { repeat: true },
+  "walk-hold-s": { repeat: true },
+  "walk-hold-e": { repeat: true },
+  "walk-hold-w": { repeat: true },
   "walk-board-n": { repeat: true },
   "walk-board-s": { repeat: true },
   "walk-board-e": { repeat: true },
@@ -380,6 +450,10 @@ const REPEAT_DEFAULTS: Record<string, { repeat: number | boolean }> = {
   "idle-stand-s": { repeat: true },
   "idle-stand-w": { repeat: true },
   "idle-stand-e": { repeat: true },
+  "idle-stand-hold-n": { repeat: true },
+  "idle-stand-hold-s": { repeat: true },
+  "idle-stand-hold-w": { repeat: true },
+  "idle-stand-hold-e": { repeat: true },
   "idle-stand-board-n": { repeat: true },
   "idle-stand-board-s": { repeat: true },
   "nose-grind-f-w": { repeat: true },
